@@ -10,14 +10,14 @@ import dataclasses
 from dataclasses import field
 from functools import lru_cache # Added for PBT sampler caching
 
-from nucleobench.common import argparse_lib
-from nucleobench.common import constants
-from nucleobench.common import testing_utils
+from gradabeam import argparse_lib
+from gradabeam import constants
+from gradabeam import testing_utils
 
-from nucleobench.optimizations import optimization_class as oc
-from nucleobench.optimizations.typing import ModelType, SequenceType, SamplesType
+from gradabeam import optimization_class as oc
+from gradabeam.typing import ModelType, SequenceType, SamplesType
 
-from .. import ada_utils
+from gradabeam import ada_utils
 
 
 PositionsAndCharactersType = ada_utils.PositionsAndCharactersType

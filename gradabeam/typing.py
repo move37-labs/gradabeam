@@ -1,14 +1,20 @@
-"""Typing for NucleoBench"""
+"""Typing for GradaBeam"""
 
-from typing import Union, Optional
+from typing import Union, Optional, Any
 
-from nucleobench.optimizations import model_class
-
-SequenceType = model_class.SequenceType
+SequenceType = str
 SamplesType = list[SequenceType]
 PositionsToMutateType = Optional[list[int]]
 TISMType = list[dict[str, float]]
 
-ModelType = Union[model_class.ModelClass, callable]
-TISMModelClass = model_class.TISMModelClass
-PyTorchDifferentiableModel = model_class.PyTorchDifferentiableModel
+# Simple base classes for type annotations
+class ModelClass:
+    pass
+
+class TISMModelClass(ModelClass):
+    pass
+
+class PyTorchDifferentiableModel(ModelClass):
+    pass
+
+ModelType = Union[ModelClass, Any]

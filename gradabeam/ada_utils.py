@@ -8,8 +8,8 @@ import torch
 import random
 import xxhash
 
-from nucleobench.optimizations import typing
-from nucleobench.optimizations import utils as opt_utils
+from gradabeam import typing
+from gradabeam import opt_utils
 
 
 SequenceType = typing.SequenceType

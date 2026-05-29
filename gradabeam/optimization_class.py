@@ -2,7 +2,7 @@
 
 from typing import Optional
 
-from nucleobench.optimizations.typing import ModelType, SequenceType, SamplesType, PositionsToMutateType
+from gradabeam.typing import ModelType, SequenceType, SamplesType, PositionsToMutateType
 
 class SequenceOptimizer(object):
     def __init__(

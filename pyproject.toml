@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gradabeam"
+version = "0.1.0"
+description = "Gradient-guided adaptive beam search optimizer with Population Based Training"
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [
+    {name = "Move37 Labs", email = "joel.shor@move37labs.com"}
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    "numpy>=1.16,<2.0.0",
+    "scipy",
+    "torch>=2.2",
+    "xxhash",
+    "pandas",
+    "pyarrow",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["gradabeam", "gradabeam.*"]
+
+[tool.pytest.ini_options]
+testpaths = ["gradabeam"]
+python_files = "*_test.py"

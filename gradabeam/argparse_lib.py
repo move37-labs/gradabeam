@@ -2,7 +2,7 @@
 
 To test that GCP resources exist and can be read:
 ```zsh
-python -m nucleobench.common.argparse_lib
+python -m gradabeam.argparse_lib
 ```
 """
 
@@ -12,7 +12,7 @@ import argparse
 import dataclasses
 import pandas as pd
 
-from nucleobench.common import constants
+from gradabeam import constants
 
 @dataclasses.dataclass
 class ParsedArgs:
