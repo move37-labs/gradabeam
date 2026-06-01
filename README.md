@@ -129,7 +129,7 @@ def get_tism(
     ...
 ```
 
-See `gradabeam.testing_utils.TISMModelClass` for a reference implementation you can inherit from.
+See `gradabeam.tism.TISMModelClass` for a reference implementation you can inherit from.
 
 ## Key Parameters
 
