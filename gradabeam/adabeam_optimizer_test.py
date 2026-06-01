@@ -16,7 +16,7 @@ from gradabeam import testing_utils
 
 @pytest.mark.parametrize('skip_repeat_sequences', [True, False])
 def test_adabeam_sanity(skip_repeat_sequences):
-    model_fn = testing_utils.CountLetterModel(flip_sign=True)
+    model_fn = testing_utils.CountLetterModel()
 
     start_seq = 'A' * 100
     start_score = model_fn([start_seq])[0]
@@ -37,7 +37,7 @@ def test_adabeam_sanity(skip_repeat_sequences):
 
 
 def test_adabeam_convergence():
-    model_fn = testing_utils.CountLetterModel(flip_sign=True)
+    model_fn = testing_utils.CountLetterModel()
 
     start_seq = 'A' * 100
     start_score = model_fn([start_seq])[0]
@@ -59,7 +59,7 @@ def test_adabeam_convergence():
 
 def test_positions_to_mutate():
     """No matter how many iterations, positions outside `positions_to_mutate` shouldn't change."""
-    model_fn = testing_utils.CountLetterModel(flip_sign=True)
+    model_fn = testing_utils.CountLetterModel()
 
     start_seq = "A" * 100
     start_score = model_fn([start_seq])[0]
@@ -85,7 +85,7 @@ def test_positions_to_mutate():
 @pytest.mark.parametrize('eval_batch_size', [1, 2, 4])
 def test_eval_batch_size_sanity(eval_batch_size):
     """Test that `eval_batch_size` works."""
-    model_fn = testing_utils.CountLetterModel(flip_sign=True)
+    model_fn = testing_utils.CountLetterModel()
 
     start_seq = "A" * 100
     start_score = model_fn([start_seq])[0]
@@ -106,7 +106,7 @@ def test_eval_batch_size_sanity(eval_batch_size):
         
 def test_eval_batch_size_consistency():
     """Test that `eval_batch_size` is consistent."""
-    model_fn = testing_utils.CountLetterModel(flip_sign=True)
+    model_fn = testing_utils.CountLetterModel()
 
     seqs = [''.join(random.choices(['A', 'G', 'T' ,'C'], k=100)) for _ in range(10)]
 

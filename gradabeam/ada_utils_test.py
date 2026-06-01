@@ -78,7 +78,6 @@ def test_expected_num_edits(num_samples=150000, atol=0.002):
             
 def test_no_tism_cost_fail():
     model_fn = testing_utils.CountLetterModel(
-        flip_sign=True,
         target_char='A',
     )
     
@@ -91,7 +90,6 @@ def test_no_tism_cost_fail():
 def test_get_tisms_basic(idx_option):
     """Test basic functionality of get_tism."""
     model_fn = testing_utils.CountLetterModel(
-        flip_sign=True,
         target_char='A',  # counts 'A's, so more A's = higher score
     )
     idxs = {
@@ -143,7 +141,6 @@ def test_get_tisms_basic(idx_option):
 def test_get_tisms_with_idxs():
     """Test get_tisms with specific indices."""
     model_fn = testing_utils.CountLetterModel(
-        flip_sign=True,
         target_char='A',
     )
     

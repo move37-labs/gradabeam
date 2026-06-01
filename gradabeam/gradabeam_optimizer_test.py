@@ -85,7 +85,7 @@ def test_gradabeam_eval_batch_size_sanity(eval_batch_size):
 
 def test_gradabeam_eval_batch_size_consistency():
     """Test that `eval_batch_size` is consistent."""
-    model_fn = testing_utils.CountLetterModel(flip_sign=True)
+    model_fn = testing_utils.CountLetterModel()
 
     seqs = [''.join(np.random.choice(['A', 'G', 'T', 'C'], size=100)) for _ in range(10)]
 
@@ -123,7 +123,6 @@ class TestGradientAlignment:
         vocab = ['A','C','G','T']
         model = testing_utils.CountLetterModel(
             target_char='C',
-            flip_sign=True,
             vocab=vocab,
         )   
 

@@ -12,7 +12,6 @@ class CountLetterModel(torch.nn.Module, TISMModelClass):
 
     def __init__(self, 
                  target_char: str = 'C', 
-                 flip_sign: bool = False, 
                  vocab: list[str] = constants.VOCAB,
                  ):
         super().__init__()
@@ -20,7 +19,6 @@ class CountLetterModel(torch.nn.Module, TISMModelClass):
             raise ValueError(f"target_char '{target_char}' must be in vocab {vocab}")
         self.target_char = target_char
         self.vocab_i = vocab.index(target_char)
-        self.flip_sign = flip_sign
         self.vocab = vocab
         self.vocab_array = np.array(vocab)
         self.vocab_to_idx = {nt: i for i, nt in enumerate(vocab)}
@@ -30,8 +28,7 @@ class CountLetterModel(torch.nn.Module, TISMModelClass):
         assert x.shape[1] == len(self.vocab), x.shape
         out_tensor = x[:, self.vocab_i, :]
         out_tensor = torch.sum(out_tensor, dim=[1])
-        if self.flip_sign:
-            out_tensor *= -1
+        out_tensor *= -1
         return out_tensor
 
     def inference_on_tensor(self, x: torch.Tensor) -> torch.Tensor:

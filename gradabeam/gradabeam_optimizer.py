@@ -154,7 +154,7 @@ class GradaBeam:
     @staticmethod
     def debug_init_args():
         return {
-            "model_fn": testing_utils.CountLetterModel(flip_sign=True),
+            "model_fn": testing_utils.CountLetterModel(),
             "start_sequence": "AAAAAA",
             "beam_size": 10,
             "mutations_per_sequence": 1,
