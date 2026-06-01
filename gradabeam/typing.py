@@ -1,10 +1,9 @@
 """Typing for GradaBeam"""
 
-from typing import Union, Optional, Any
+from typing import Union, Any
 
 SequenceType = str
 SamplesType = list[SequenceType]
-PositionsToMutateType = Optional[list[int]]
 TISMType = list[dict[str, float]]
 
 # Simple base classes for type annotations

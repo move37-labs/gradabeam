@@ -10,7 +10,6 @@ from gradabeam import argparse_lib
 from gradabeam import constants
 from gradabeam import testing_utils
 
-from gradabeam import optimization_class as oc
 from gradabeam.typing import ModelType, SequenceType, SamplesType
 
 from gradabeam import ada_utils
@@ -19,7 +18,7 @@ from gradabeam import ada_utils
 RolloutNode = ada_utils.RolloutNode
 
 
-class AdaBeam(oc.SequenceOptimizer):
+class AdaBeam:
     """AdaBeam designer."""
 
     def __init__(
@@ -129,62 +128,6 @@ class AdaBeam(oc.SequenceOptimizer):
             rng_seed=self.rng_seed,
         )
         
-    @staticmethod
-    def init_parser():
-        parser = argparse.ArgumentParser(description="", add_help=False)
-        group = parser.add_argument_group("AdaBeam init args")
-
-        group.add_argument(
-            "--beam_size",
-            type=int,
-            default=10,
-            required=False,
-            help="Number of sequences to propose for measurement from ground truth per round",
-        )
-        group.add_argument(
-            "--mutations_per_sequence",
-            type=float,
-            required=False,
-            help="The expected number of mutations per sequence.",
-        )
-        group.add_argument(
-            "--n_rollouts_per_root",
-            type=int,
-            default=4,
-            required=False,
-            help="Number of rollouts to perform per parent node (per round)",
-        )
-        group.add_argument(
-            "--skip_repeat_sequences",
-            type=argparse_lib.str_to_bool,
-            default=True,
-            required=False,
-            help="",
-        )
-        group.add_argument(
-            "--eval_batch_size",
-            type=int,
-            default=1,
-            required=False,
-            help="For code optimization; size of batches sent to model",
-        )
-        group.add_argument(
-            "--rng_seed",
-            type=int,
-            default=42,
-            required=False,
-            help="Seed for the pseudo-random number generator",
-        )
-        group.add_argument(
-            "--debug",
-            type=argparse_lib.str_to_bool,
-            default=None,
-            required=False,
-            help="Debug info.",
-        )
-
-        return parser
-
     @staticmethod
     def debug_init_args():
         return {

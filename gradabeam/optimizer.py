@@ -14,7 +14,6 @@ from gradabeam import argparse_lib
 from gradabeam import constants
 from gradabeam import testing_utils
 
-from gradabeam import optimization_class as oc
 from gradabeam.typing import ModelType, SequenceType, SamplesType
 
 from gradabeam import ada_utils
@@ -34,7 +33,7 @@ class RolloutNodeWithProbs(ada_utils.RolloutNode):
 
 RolloutNode = RolloutNodeWithProbs
 
-class GradaBeam(oc.SequenceOptimizer):
+class GradaBeam:
     """GradaBeam nucleic acid sequence designer with PBT."""
 
     def __init__(
@@ -158,23 +157,6 @@ class GradaBeam(oc.SequenceOptimizer):
             sequences=sequences,
             batch_size=self.eval_batch_size,
         )
-
-    @staticmethod
-    def init_parser():
-        parser = argparse.ArgumentParser(description="", add_help=False)
-        group = parser.add_argument_group("GradaBeam init args")
-        # ... [Existing args] ...
-        group.add_argument("--beam_size", type=int, default=10, required=False)
-        group.add_argument("--mutations_per_sequence", type=float, required=False)
-        group.add_argument("--n_rollouts_per_root", type=int, default=4, required=False)
-        group.add_argument("--eval_batch_size", type=int, default=1, required=False)
-        group.add_argument("--rng_seed", type=int, default=42, required=False)
-        group.add_argument("--exploration_alpha", type=float, required=True)
-        group.add_argument("--max_rollout_len", type=int, default=200, required=False)
-        group.add_argument("--use_pbt", type=argparse_lib.str_to_bool, default=True, required=False,
-                          help="Enable Population Based Training for adaptive mutation rates.")
-        group.add_argument("--debug", type=argparse_lib.str_to_bool, default=None, required=False)
-        return parser
 
     @staticmethod
     def debug_init_args():
