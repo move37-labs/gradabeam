@@ -10,14 +10,16 @@ from gradabeam.seq_utils import dna2tensor_batch
 class CountLetterModel(torch.nn.Module, TISMModelClass):
     """Count number of occurrences of first vocab letter."""
 
-    def __init__(self, target_char: str = 'C'):
+    def __init__(self, target_char: str = "C"):
         super().__init__()
         self.vocab = constants.VOCAB
         if target_char not in self.vocab:
-            raise ValueError(f"target_char '{target_char}' must be in vocab {self.vocab}")
+            raise ValueError(
+                f"target_char '{target_char}' must be in vocab {self.vocab}"
+            )
         self.target_char = target_char
         self.vocab_i = self.vocab.index(target_char)
-        
+
         self.vocab_array = np.array(self.vocab)
         self.vocab_to_idx = {nt: i for i, nt in enumerate(self.vocab)}
 
@@ -31,7 +33,7 @@ class CountLetterModel(torch.nn.Module, TISMModelClass):
 
     def inference_on_tensor(self, x: torch.Tensor) -> torch.Tensor:
         return self.forward(x)
-    
+
     def inference_on_strings(self, seqs: list[str]) -> list[float]:
         torch_seq = dna2tensor_batch(seqs, vocab_list=self.vocab)
         result = self.inference_on_tensor(torch_seq)
@@ -39,13 +41,13 @@ class CountLetterModel(torch.nn.Module, TISMModelClass):
 
     def __call__(self, x):
         return self.inference_on_strings(x)
-    
+
     @property
     def data_params(self):
         return {
-            'tasks': {'name':[f'task{i}' for i in range(3)] + ['Neuron']},
-            'train': {'seq_len': 200},
+            "tasks": {"name": [f"task{i}" for i in range(3)] + ["Neuron"]},
+            "train": {"seq_len": 200},
         }
-    
+
     def get_task_idxs(self, *args, **kwargs):
         return [0, 1, 2]

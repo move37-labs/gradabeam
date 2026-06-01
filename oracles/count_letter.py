@@ -26,7 +26,7 @@ from gradabeam import testing_utils
 
 def make_oracle(argv=None):
     parser = argparse.ArgumentParser()
-    parser.add_argument('--target_char', type=str, default='C')
+    parser.add_argument("--target_char", type=str, default="C")
     args = parser.parse_args(argv)
     # CountLetterModel counts target_char occurrences and negates the count (lower = better).
     # The optimizer's internal negation of the score maximizes target letter content.

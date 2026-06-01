@@ -5,7 +5,9 @@ import torch
 from gradabeam.seq_utils import dna2tensor, dna2tensor_integer
 
 
-def apply_gradient_mask(x: torch.Tensor, idxs: list[int]) -> tuple[torch.Tensor, torch.Tensor]:
+def apply_gradient_mask(
+    x: torch.Tensor, idxs: list[int]
+) -> tuple[torch.Tensor, torch.Tensor]:
     assert min(idxs) >= 0
     assert max(idxs) < x.shape[2]
     assert x.ndim == 3, x.shape
@@ -34,7 +36,9 @@ def grad_torch(
     return grads
 
 
-def grad_torch_to_tism_torch(sg_tensor: torch.Tensor, base_seq: torch.Tensor) -> torch.Tensor:
+def grad_torch_to_tism_torch(
+    sg_tensor: torch.Tensor, base_seq: torch.Tensor
+) -> torch.Tensor:
     assert sg_tensor.ndim == 2
     assert base_seq.ndim == 1
     assert sg_tensor.shape[1] == base_seq.shape[0]
@@ -57,11 +61,13 @@ class TISMModelClass:
     """
 
     def str2tensor(self, x: str) -> torch.Tensor:
-        assert hasattr(self, 'vocab'), 'Vocab not set.'
+        assert hasattr(self, "vocab"), "Vocab not set."
         return dna2tensor(x, vocab_list=self.vocab)
 
     def tensor2int(self, x: torch.Tensor) -> torch.Tensor:
-        return dna2tensor_integer(self.vocab_array[x.argmax(dim=0)].tolist(), vocab_list=self.vocab)
+        return dna2tensor_integer(
+            self.vocab_array[x.argmax(dim=0)].tolist(), vocab_list=self.vocab
+        )
 
     def tism_torch(self, x: str, idxs: list[int] | None = None) -> torch.Tensor:
         input_tensor = self.str2tensor(x)
@@ -73,17 +79,23 @@ class TISMModelClass:
         if idxs is None:
             x_effective = x
         else:
-            x_effective = ''.join([x[idx] for idx in idxs])
+            x_effective = "".join([x[idx] for idx in idxs])
 
         vocab_map = {nt: i for i, nt in enumerate(self.vocab)}
-        base_seq_idx = torch.tensor([vocab_map[c] for c in x_effective], dtype=torch.long)
+        base_seq_idx = torch.tensor(
+            [vocab_map[c] for c in x_effective], dtype=torch.long
+        )
 
-        tism_tensor = grad_torch_to_tism_torch(torch.squeeze(sg_tensor, dim=0), base_seq_idx)
+        tism_tensor = grad_torch_to_tism_torch(
+            torch.squeeze(sg_tensor, dim=0), base_seq_idx
+        )
         return tism_tensor
 
-    def get_tism(self, sequence: str, idxs: list[int] | None = None) -> tuple[list[tuple[int, str]], np.ndarray]:
-        assert hasattr(self, 'vocab_to_idx'), 'missing "vocab_to_idx".'
-        assert hasattr(self, 'vocab_array'), 'missing "vocab_array".'
+    def get_tism(
+        self, sequence: str, idxs: list[int] | None = None
+    ) -> tuple[list[tuple[int, str]], np.ndarray]:
+        assert hasattr(self, "vocab_to_idx"), 'missing "vocab_to_idx".'
+        assert hasattr(self, "vocab_array"), 'missing "vocab_array".'
         tism_tensor = self.tism_torch(sequence, idxs)
         vocab_size, tism_seq_len = tism_tensor.shape
 
@@ -94,13 +106,15 @@ class TISMModelClass:
 
         assert len(positions_to_mutate) == tism_seq_len
 
-        if tism_tensor.device.type != 'cpu':
+        if tism_tensor.device.type != "cpu":
             tism_np = tism_tensor.cpu().numpy()
         else:
             tism_np = tism_tensor.numpy()
 
         base_seq_chars = np.array([sequence[pos] for pos in positions_to_mutate])
-        base_seq_indices = np.array([self.vocab_to_idx[char] for char in base_seq_chars])
+        base_seq_indices = np.array(
+            [self.vocab_to_idx[char] for char in base_seq_chars]
+        )
 
         positions_array = np.repeat(positions_to_mutate, vocab_size)
         vocab_repeated = np.tile(self.vocab_array, tism_seq_len)
@@ -115,7 +129,9 @@ class TISMModelClass:
         valid_vocab = vocab_repeated[valid_mask]
         valid_logits = tism_values[valid_mask]
 
-        pos_and_chars_to_mutate = list(zip(valid_positions.tolist(), valid_vocab.tolist()))
+        pos_and_chars_to_mutate = list(
+            zip(valid_positions.tolist(), valid_vocab.tolist())
+        )
         logits = valid_logits.astype(np.float32)
 
         return (pos_and_chars_to_mutate, logits)

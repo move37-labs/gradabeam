@@ -70,10 +70,10 @@ class CountSubstringModel(torch.nn.Module, tism.TISMModelClass):
         assert x.ndim == 3
         assert x.shape[1] == len(self.vocab), x.shape
 
-        out = F.conv1d(x, self.substr_tensor)   # [batch, 1, seq_len - substr_len + 1]
-        out = torch.squeeze(out, dim=1)          # [batch, seq_len - substr_len + 1]
-        out = torch.square(out)                  # nonlinear: full match >> partial match
-        out = torch.sum(out, dim=1)              # [batch]
+        out = F.conv1d(x, self.substr_tensor)  # [batch, 1, seq_len - substr_len + 1]
+        out = torch.squeeze(out, dim=1)  # [batch, seq_len - substr_len + 1]
+        out = torch.square(out)  # nonlinear: full match >> partial match
+        out = torch.sum(out, dim=1)  # [batch]
 
         # Negate so that lower = better, matching gradabeam convention.
         out = out * -1
@@ -85,7 +85,7 @@ class CountSubstringModel(torch.nn.Module, tism.TISMModelClass):
     def __call__(self, seqs: list[str], return_debug_info: bool = False):
         if isinstance(seqs, str):
             raise ValueError(
-                f'CountSubstringModel input must be a list of strings, not a single string: {seqs!r}'
+                f"CountSubstringModel input must be a list of strings, not a single string: {seqs!r}"
             )
         torch_seq = seq_utils.dna2tensor_batch(seqs, vocab_list=self.vocab)
         result = self.inference_on_tensor(torch_seq)
@@ -97,7 +97,11 @@ class CountSubstringModel(torch.nn.Module, tism.TISMModelClass):
 
 def make_oracle(argv=None):
     parser = argparse.ArgumentParser()
-    parser.add_argument('--substring', type=str, required=True,
-                        help='Target substring to maximize in the sequence.')
+    parser.add_argument(
+        "--substring",
+        type=str,
+        required=True,
+        help="Target substring to maximize in the sequence.",
+    )
     args = parser.parse_args(argv)
     return CountSubstringModel(substring=args.substring)
