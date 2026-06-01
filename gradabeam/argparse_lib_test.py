@@ -9,9 +9,6 @@ pytest gradabeam/argparse_lib_test.py
 import os
 import tempfile
 import unittest
-from unittest import mock
-import pandas as pd
-import numpy as np
 
 from gradabeam import argparse_lib
 

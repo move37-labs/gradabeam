@@ -4,13 +4,10 @@ To verify that Zenodo resources are reachable:
     python -m gradabeam.argparse_lib
 """
 
-from typing import Any, Iterable, Optional, Union
+from typing import Iterable, Optional, Union
 
 import argparse
 import dataclasses
-import pandas as pd
-
-from gradabeam import constants
 
 
 @dataclasses.dataclass
