@@ -31,7 +31,7 @@ import numpy as np
 import torch
 
 try:
-    import bpnetlite  # pylint:disable=unused-import
+    import bpnetlite  # noqa: F401
 except ImportError:
     raise ImportError(
         "The BPNet oracle requires 'bpnet-lite'. "
@@ -70,7 +70,7 @@ def download(model_name: str):
         try:
             model = torch.load(cache_path, weights_only=False, map_location=torch.device('cpu'))
         except Exception:
-            print(f'Cached file is corrupt, deleting and re-downloading...')
+            print('Cached file is corrupt, deleting and re-downloading...')
             os.remove(cache_path)
 
     if not os.path.exists(cache_path):
@@ -103,7 +103,7 @@ class ControlWrapper(torch.nn.Module):
         self.model = model
 
     def forward(self, X, X_ctl=None):
-        if X_ctl != None:
+        if X_ctl is not None:
             return self.model(X, X_ctl)
 
         if self.model.n_control_tracks == 0:
