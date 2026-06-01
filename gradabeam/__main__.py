@@ -62,8 +62,10 @@ _OPTIMIZERS = {
 def _load_oracle(path: str, unknown_args: list[str] | None = None):
     """Load make_oracle() from a user-supplied script file."""
     spec = importlib.util.spec_from_file_location("_user_oracle", path)
+    assert spec is not None, f"Could not load module spec from {path!r}"
+    assert spec.loader is not None, f"Module spec has no loader for {path!r}"
     module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    spec.loader.exec_module(module)  # type: ignore[union-attr]
     if not hasattr(module, "make_oracle"):
         raise AttributeError(f"{path!r} must define a make_oracle() function.")
 
@@ -110,8 +112,7 @@ def _build_parser() -> argparse.ArgumentParser:
         required=True,
         help=(
             "Starting sequence. Supports special prefixes:\n"
-            "  local://<path>   — read the sequence from a local file\n"
-            "  enformer://<idx> — fetch from the Zenodo Enformer dataset"
+            "  local://<path>   — read the sequence from a local file"
         ),
     )
     p.add_argument(
@@ -119,7 +120,7 @@ def _build_parser() -> argparse.ArgumentParser:
         default=None,
         help=(
             'Comma-separated 0-based positions to mutate, e.g. "0,1,2,50". '
-            "Also supports local:// and enformer:// prefixes. "
+            "Also supports local:// prefix. "
             "Defaults to all positions."
         ),
     )

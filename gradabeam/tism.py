@@ -32,6 +32,7 @@ def grad_torch(
 
     y = model(input_tensor)
     y.sum().backward(retain_graph=False)
+    assert x_grad.grad is not None
     grads = x_grad.grad.detach().cpu()
     return grads
 
@@ -59,6 +60,13 @@ class TISMModelClass:
       - self.vocab_to_idx: dict[str, int]
       - self.inference_on_tensor(x: torch.Tensor) -> torch.Tensor
     """
+
+    vocab: list[str]
+    vocab_array: np.ndarray
+    vocab_to_idx: dict[str, int]
+
+    def inference_on_tensor(self, x: torch.Tensor) -> torch.Tensor:
+        raise NotImplementedError
 
     def str2tensor(self, x: str) -> torch.Tensor:
         assert hasattr(self, "vocab"), "Vocab not set."

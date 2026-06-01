@@ -82,7 +82,7 @@ class AdaBeam:
 
         # Mutate a string to create a starting population.
         assert isinstance(start_sequence, str)
-        seed_node = RolloutNode(seq=start_sequence, fitness=None)
+        seed_node = RolloutNode(seq=start_sequence, fitness=np.float32(np.nan))
         num_edit_locs = self.num_mutations_sampler.sample(beam_size)
         self.current_nodes = []
         for i in range(0, beam_size, self.eval_batch_size):
@@ -185,15 +185,17 @@ class AdaBeam:
 
         # Propose the top `self.beam_size` new sequences we have generated.
         # Break fitness ties using sequence string to ensure deterministic behavior.
-        sequences = sorted(sequences, key=lambda x: (x.fitness, x.seq), reverse=True)
-        top_nodes = sequences[: self.beam_size]
+        sorted_sequences = sorted(
+            sequences, key=lambda x: (x.fitness, x.seq), reverse=True
+        )
+        top_nodes = sorted_sequences[: self.beam_size]
 
         return top_nodes
 
     def mutate_nodes(
         self,
         nodes: list[RolloutNode],
-        num_edit_locs: list[int],
+        num_edit_locs: list[int] | np.ndarray,
         max_num_tries: int = 300,
     ) -> list[RolloutNode]:
         assert len(nodes) == len(num_edit_locs) <= self.eval_batch_size, (
