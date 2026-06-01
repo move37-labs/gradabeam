@@ -130,6 +130,7 @@ class TestGradientAlignment:
             n_rollouts_per_root=1,
             eval_batch_size=1,
             exploration_alpha=0.0,
+            use_pbt=True,
             gradient_prob_cap=1.0,  # No cap.
             rng_seed=42,
             debug=True,
