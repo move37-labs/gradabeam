@@ -1,31 +1,52 @@
 """Standalone CLI entrypoint for GradaBeam / AdaBeam sequence optimizers.
 
-Runs in demo mode using a built-in CountLetterModel oracle (maximizes C-content
-in the sequence). To use a real oracle, import GradaBeam or AdaBeam directly.
+Runs sequence optimization using a user-specified oracle script.
 
 Usage
 -----
-    python -m gradabeam [options]
+    python -m gradabeam \
+        --oracle_script oracles/count_letter.py \
+        --start_sequence AAAAAAAAAA \
+        --n_steps 10 \
+        --beam_size 2 \
+        --mutations_per_sequence 2.0 \
+        --n_rollouts_per_root 12
 
 Examples
 --------
-    # GradaBeam on a short sequence (10 steps, demo oracle)
-    python -m gradabeam --start_sequence AAAAAAAAAA --n_steps 10
+    # GradaBeam on a short sequence (count_letter oracle)
+    python -m gradabeam \
+        --oracle_script oracles/count_letter.py \
+        --start_sequence AAAAAAAAAA \
+        --n_steps 10 \
+        --beam_size 2 \
+        --mutations_per_sequence 2.0 \
+        --n_rollouts_per_root 12
 
     # AdaBeam variant
-    python -m gradabeam --optimizer adabeam --start_sequence AAAAAAAAAA --n_steps 10
+    python -m gradabeam \
+        --optimizer adabeam \
+        --oracle_script oracles/count_letter.py \
+        --start_sequence AAAAAAAAAA \
+        --n_steps 10 \
+        --beam_size 2 \
+        --mutations_per_sequence 1.0 \
+        --n_rollouts_per_root 4
 
     # Load sequence from a local text file
-    python -m gradabeam --start_sequence local://seq.txt --n_steps 5
-
-    # Load from the Zenodo Enformer dataset (requires network access)
-    python -m gradabeam --start_sequence enformer://12 --n_steps 3
+    python -m gradabeam \
+        --oracle_script oracles/count_letter.py \
+        --start_sequence local://seq.txt \
+        --n_steps 5 \
+        --beam_size 2 \
+        --mutations_per_sequence 2.0 \
+        --n_rollouts_per_root 12
 """
 
 import argparse
-import sys
+import importlib.util
 
-from gradabeam import argparse_lib, constants, testing_utils
+from gradabeam import argparse_lib
 from gradabeam.gradabeam_optimizer import GradaBeam
 from gradabeam.adabeam_optimizer import AdaBeam
 
@@ -36,15 +57,24 @@ _OPTIMIZERS = {
 }
 
 
+def _load_oracle(path: str):
+    """Load make_oracle() from a user-supplied script file."""
+    spec = importlib.util.spec_from_file_location('_user_oracle', path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    if not hasattr(module, 'make_oracle'):
+        raise AttributeError(f'{path!r} must define a make_oracle() function.')
+    return module.make_oracle()
+
+
 def _build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog='python -m gradabeam',
         description=(
-            'Run GradaBeam or AdaBeam in demo mode.\n'
-            'The demo oracle (CountLetterModel) maximizes C-content in the sequence.\n'
-            'To use a real oracle, import GradaBeam / AdaBeam directly.'
+            'Run GradaBeam or AdaBeam sequence optimization.\n'
+            'Requires a custom oracle script via --oracle_script.'
         ),
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
 
     # ------------------------------------------------------------------ #
@@ -53,14 +83,23 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         '--optimizer',
         choices=list(_OPTIMIZERS),
-        default='gradabeam',
+        required=True,
         help='Which optimizer to run.',
+    )
+    p.add_argument(
+        '--oracle_script',
+        required=True,
+        metavar='PATH',
+        help=(
+            'Path to a Python file that defines make_oracle() -> oracle. '
+            'See oracles/template.py for a working starting point.'
+        ),
     )
     p.add_argument(
         '--start_sequence',
         required=True,
         help=(
-            'Starting DNA/RNA sequence. Supports special prefixes:\n'
+            'Starting sequence. Supports special prefixes:\n'
             '  local://<path>   — read the sequence from a local file\n'
             '  enformer://<idx> — fetch from the Zenodo Enformer dataset'
         ),
@@ -77,7 +116,7 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         '--n_steps',
         type=int,
-        default=10,
+        required=True,
         help='Number of optimization steps to run.',
     )
     p.add_argument(
@@ -91,26 +130,29 @@ def _build_parser() -> argparse.ArgumentParser:
     # Shared optimizer args (present in both GradaBeam and AdaBeam)       #
     # ------------------------------------------------------------------ #
     shared = p.add_argument_group('Shared optimizer options')
-    shared.add_argument('--beam_size', type=int, default=10,
+    shared.add_argument('--beam_size', type=int, required=True,
                         help='Number of candidates to keep between rounds.')
     shared.add_argument(
         '--mutations_per_sequence',
         type=float,
-        default=None,
-        help=(
-            'Expected number of mutations per rollout step. '
-            'Defaults to max(1, 1%% of mutable positions).'
-        ),
+        required=True,
+        help='Expected number of mutations per rollout step.',
     )
-    shared.add_argument('--n_rollouts_per_root', type=int, default=4,
+    shared.add_argument('--n_rollouts_per_root', type=int, required=True,
                         help='Rollouts launched from each beam candidate per round.')
     shared.add_argument('--eval_batch_size', type=int, default=1,
                         help='Sequences sent to the oracle per batch call.')
-    shared.add_argument('--rng_seed', type=int, default=42)
+    shared.add_argument('--rng_seed', type=int, default=42,
+                        help='Seed for the pseudo-random number generator.')
     shared.add_argument('--max_rollout_len', type=int, default=200,
                         help='Maximum rollout depth before stopping.')
-    shared.add_argument('--debug', action='store_true', default=False,
-                        help='Print debug information during optimization.')
+    shared.add_argument(
+        '--debug',
+        type=argparse_lib.str_to_bool,
+        default=False,
+        metavar='BOOL',
+        help='Print debug information during optimization.',
+    )
 
     # ------------------------------------------------------------------ #
     # GradaBeam-only args                                                  #
@@ -119,16 +161,24 @@ def _build_parser() -> argparse.ArgumentParser:
     gb.add_argument(
         '--exploration_alpha',
         type=float,
-        default=0.05,
+        default=0.5,
         help=(
             'Mix between gradient-guided (0.0) and uniform-random (1.0) mutations. '
             'Adaptively updated by PBT when --use_pbt is true.'
         ),
     )
-    gb.add_argument('--gradient_prob_cap', type=float, default=0.10,
-                    help='Per-action probability cap applied after softmax.')
-    gb.add_argument('--max_logit', type=float, default=3.0,
-                    help='Dynamic temperature ceiling for TISM logit scaling.')
+    gb.add_argument(
+        '--gradient_prob_cap',
+        type=float,
+        default=0.10,
+        help='Per-action probability cap applied after softmax.',
+    )
+    gb.add_argument(
+        '--max_logit',
+        type=float,
+        default=3.0,
+        help='Dynamic temperature ceiling for TISM logit scaling.',
+    )
     gb.add_argument(
         '--use_pbt',
         type=argparse_lib.str_to_bool,
@@ -144,7 +194,7 @@ def _build_parser() -> argparse.ArgumentParser:
     ab.add_argument(
         '--skip_repeat_sequences',
         type=argparse_lib.str_to_bool,
-        default=True,
+        default=False,
         metavar='BOOL',
         help='Skip sequences already evaluated during rollouts.',
     )
@@ -165,29 +215,12 @@ def main(argv=None):
     )
 
     n_mutable = len(positions_to_mutate) if positions_to_mutate else len(start_sequence)
-
-    # ------------------------------------------------------------------ #
-    # Default mutations_per_sequence                                       #
-    # ------------------------------------------------------------------ #
     mutations_per_sequence = args.mutations_per_sequence
-    if mutations_per_sequence is None:
-        mutations_per_sequence = max(1.0, n_mutable * 0.01)
-        print(
-            f'[INFO] --mutations_per_sequence not set; using {mutations_per_sequence:.2f}',
-            file=sys.stderr,
-        )
 
     # ------------------------------------------------------------------ #
-    # Demo oracle                                                          #
+    # Load custom oracle                                                   #
     # ------------------------------------------------------------------ #
-    # CountLetterModel(vocab_i=1) counts 'C' occurrences.
-    # flip_sign=True makes model output negative (–C_count).
-    # ModelWrapper.get_fitness negates the model output, so the optimizer
-    # internally maximizes +C_count (higher C-content = better fitness).
-    model_fn = testing_utils.CountLetterModel(
-        vocab_i=constants.VOCAB.index('C'),
-        flip_sign=True,
-    )
+    model_fn = _load_oracle(args.oracle_script)
 
     # ------------------------------------------------------------------ #
     # Print run summary                                                    #
@@ -199,7 +232,7 @@ def main(argv=None):
     print(f'Mutations/step       : {mutations_per_sequence:.2f}')
     print(f'Steps                : {args.n_steps}')
     print(f'Beam size            : {args.beam_size}')
-    print(f'Oracle               : CountLetterModel (maximizes C-content — demo only)')
+    print(f'Oracle               : {args.oracle_script}')
     print()
 
     # ------------------------------------------------------------------ #
