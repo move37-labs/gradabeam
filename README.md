@@ -1,6 +1,7 @@
 # GrAdaBeam
 
 [![bioRxiv](https://img.shields.io/badge/bioRxiv-10.1101%2F2025.06.20.660785-b31b1b.svg)](https://www.biorxiv.org/content/10.1101/2025.06.20.660785)
+[![codecov](https://codecov.io/gh/move37-labs/gradabeam/graph/badge.svg)](https://codecov.io/gh/move37-labs/gradabeam)
 
 Gradient-guided adaptive beam search optimizer with Population Based Training (PBT), for nucleic acid (DNA) sequence design.
 
