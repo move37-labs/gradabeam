@@ -4,13 +4,11 @@ Adaptive beam, adaptive mutation rate, adaptive directed evolution.
 """
 
 import numpy as np
-
-from gradabeam import constants
-from gradabeam import testing_utils
-
 from typing import Any
 
 from gradabeam import ada_utils
+from gradabeam import constants
+from gradabeam import testing_utils
 
 
 RolloutNode = ada_utils.RolloutNode
