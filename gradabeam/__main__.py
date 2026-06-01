@@ -20,7 +20,7 @@ Examples
         --optimizer gradabeam \
         --oracle_script oracles/count_letter.py \
         --start_sequence AAAAAAAAAA \
-        --n_steps 10 \
+        --n_steps 1000 \
         --beam_size 2 \
         --mutations_per_sequence 2.0 \
         --n_rollouts_per_root 12
@@ -30,7 +30,7 @@ Examples
         --optimizer adabeam \
         --oracle_script oracles/count_letter.py \
         --start_sequence AAAAAAAAAA \
-        --n_steps 10 \
+        --n_steps 1000 \
         --beam_size 2 \
         --mutations_per_sequence 1.0 \
         --n_rollouts_per_root 4
@@ -40,7 +40,7 @@ Examples
         --optimizer gradabeam \
         --oracle_script oracles/count_letter.py \
         --start_sequence local://seq.txt \
-        --n_steps 5 \
+        --n_steps 1000 \
         --beam_size 2 \
         --mutations_per_sequence 2.0 \
         --n_rollouts_per_root 12
