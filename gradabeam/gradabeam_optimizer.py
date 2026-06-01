@@ -103,7 +103,7 @@ class GradaBeam:
         # Initialize with gradient-based mutations
         initialized_roots = self.initialize_roots_with_gradients([seed_node] * beam_size)
         
-        # [PBT Modification]: Setup initial PBT sampling
+        # Setup initial PBT sampling
         initial_sampler = self.get_sampler(seed_node.mutations_per_sequence)
         num_edit_locs = [int(x) for x in initial_sampler.sample(beam_size)]
         
@@ -118,12 +118,10 @@ class GradaBeam:
                     [seed_node.mutations_per_sequence] * len(cur_num_edits),
             ))
 
-    # [PBT Modification]: Added helper
     def get_sampler(self, mutations_per_sequence: float) -> ada_utils.NumberEditsSampler:
         rounded_rate = round(mutations_per_sequence, 4)
         return self._get_sampler_cached(rounded_rate)
     
-    # [PBT Modification]: Added helper
     @lru_cache(maxsize=None)
     def _get_sampler_cached(self, mutations_per_sequence: float) -> ada_utils.NumberEditsSampler:
         mu = mutations_per_sequence / len(self.positions_to_mutate)
@@ -133,7 +131,6 @@ class GradaBeam:
             rng_seed=self.rng_seed,
         )
 
-    # [PBT Modification]: Added helper
     def _get_next_mutation_params(self, node: RolloutNode) -> tuple[int, float]:
         """Calculates n_edits, new mutation rate, and target alpha for the child node."""
         current_rate = node.mutations_per_sequence
@@ -185,9 +182,6 @@ class GradaBeam:
         limit = min(n_samples, len(self.current_nodes))
         sorted_nodes = sorted(self.current_nodes, key=lambda x: x.fitness, reverse=True)
         return [x.seq for x in sorted_nodes][:limit]
-    
-    def is_finished(self) -> bool:
-        return False
 
     def propose_sequences(self, root_nodes: list[RolloutNode]) -> list[RolloutNode]:
         """Propose top `beam_size` sequences for evaluation."""

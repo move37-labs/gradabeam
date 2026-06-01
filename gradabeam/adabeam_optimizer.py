@@ -150,9 +150,6 @@ class AdaBeam:
         sorted_nodes = sorted(self.current_nodes, key=lambda x: x.fitness, reverse=True)
         return [x.seq for x in sorted_nodes][:limit]
 
-    def is_finished(self) -> bool:
-        return False
-
     def propose_sequences(self, root_nodes: list[RolloutNode]) -> list[RolloutNode]:
         """Propose top `beam_size` sequences for evaluation."""
         sequences, rollout_lengths = set(), []
