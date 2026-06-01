@@ -54,3 +54,8 @@ ignore_missing_imports = true
 warn_unused_configs = true
 show_error_codes = true
 
+[tool.coverage.run]
+omit = [
+    "gradabeam/__main__.py",
+]
+
