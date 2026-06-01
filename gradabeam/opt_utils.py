@@ -1,7 +1,5 @@
 """Common utils for optimization algorithms."""
 
-from typing import Generator
-
 import numpy as np
 
 
@@ -23,28 +21,6 @@ def get_locations_to_edit(
         raise ValueError('Arg not recognized.')
     
     
-def generate_single_edit_mutants(
-    base_str: str, 
-    loc_to_edit: int,
-    alphabet: list[str],
-    rng: np.random.Generator,
-    method: str,
-    ) -> Generator[str, None, None]:
-    """Return a generator of potential next strings."""
-    assert isinstance(alphabet, list)
-    assert len(alphabet) > 1
-    
-    for loc in loc_to_edit:
-        if method == 'all':
-            chars = alphabet
-        elif method == 'random':
-            chars = rng.choice(alphabet)
-        else:
-            raise ValueError('Arg not recognized.')
-        for c in chars:
-            yield base_str[:loc] + c + base_str[loc + 1:]
-            
-            
 def generate_single_mutant_multiedits(
     base_str: str, 
     locs_to_edit: list[int],

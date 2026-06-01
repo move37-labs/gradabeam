@@ -160,86 +160,9 @@ class ModelWrapper:
         return (pos_and_chars_to_mutate, logits)
     
     
-def generate_random_mutant(
-    sequence: str, 
-    positions_to_mutate: list[str],
-    mu: float, 
-    alphabet: str, 
-    rng: random.Random,
-) -> str:
-    """
-    Generate a mutant of `sequence` where each residue mutates with probability `mu`.
-
-    So the expected value of the total number of mutations is `len(positions_to_mutate) * mu`.
-    
-    NOTE: This is used in adalead_ref, with rejection sampling. For efficiency, we prefer 
-    `generate_random_mutant_v2` since it avoids the need for rejection sampling.
-
-    Args:
-        sequence: Sequence that will be mutated from.
-        positions_to_mutate: Allowed positions to be mutated.
-        mu: Probability of mutation per residue.
-        alphabet: Alphabet string.
-        rng: Random number generator.
-
-    Returns:
-        Mutant sequence string.
-
-    """
-    mutant = []
-    for i, s in enumerate(sequence):
-        if i in positions_to_mutate and rng.random() < mu:
-            mutant.append(rng.choice(alphabet))
-        else:
-            mutant.append(s)
-    return "".join(mutant)
-
-
 def _F_inverse(mu: float, seq_len: int) -> float:
     """F_inverse = 1 - (1-mu')^l """
     return -np.expm1( seq_len * np.log1p(-mu) )
-
-
-def num_edits_likelihood_adalead_legacy(
-    num_edits: int,
-    seq_len: int,
-    mu: float,
-    F_inverse: float | None = None,
-    ) -> float:
-    """The likelihood of `num_edits` edits in the reference Adalead implementation.
-    
-    Note that the algorithm uses `generate_random_mutant` above, with rejection sampling
-    if there are no edits.
-    
-    See `adalead_utils_test.py` for a test that these are equivalent.
-    
-    Form:
-    mu := mutation rate
-    mu' := 3/4 * mu
-    l := sequence length
-    n := number of edits
-    Binom(n, l, mu) := binomial distribution
-    
-    F := 1 / (1 - (1-mu')^l)
-    
-    =>
-    Pr[N locations edited] = 0, if N <= 0, N > l
-    Pr[N locations edited] = Binom(n, l, mu') * F, otherwise
-    
-    E[num locations edited] = F * mu' * l
-        
-        
-    NOTE: For numerical accuracy, we note the following:
-    
-    (1 - mu')^l = exp( log( 1 - epsilon)^l ) )
-                = exp( l * log( 1 + (-epsilon) ) ) )
-                = exp( l * np.log1p(-epsilon) )
-    
-    """
-    return num_edits_likelihood_adabeam(
-        num_edits=num_edits, 
-        seq_len=seq_len, 
-        mu=mu * 3.0 / 4.0)
 
 
 def num_edits_likelihood_adabeam(
@@ -289,11 +212,6 @@ def num_edits_likelihood_adabeam(
     probs[num_edits == 0] = 0.0
     
     return probs
-
-
-def expected_num_edits_adalead_v2(sequence_len: int, mutation_rate: float) -> float:
-    F_inverse = _F_inverse(mutation_rate, sequence_len)
-    return sequence_len * mutation_rate / F_inverse
 
 
 class NumberEditsSampler(object):
@@ -424,79 +342,6 @@ def generate_random_mutant_tism(
         mutant[int(pos)] = str(char)
         rel_pos_of_mutations.append(i)  # Use relative position, which is needed downstream.
     return ''.join(mutant), rel_pos_of_mutations
-
-
-def recombine_population(
-    gen: list[str],
-    rng: random.Random,
-    recomb_rate: float,
-    positions_to_mutate: list[int],
-    ) -> list[str]:
-    # If only one member of population, can't do any recombining.
-    if len(gen) == 1:
-        return gen
-
-    rng.shuffle(gen)
-    ret = []
-    for i in range(0, len(gen) - 1, 2):
-        strA = []
-        strB = []
-        switch = False
-        for ind in positions_to_mutate:
-            if rng.random() < recomb_rate:
-                switch = not switch
-
-            # Put together recombinants.
-            if switch:
-                strA.append(gen[i][ind])
-                strB.append(gen[i + 1][ind])
-            else:
-                strB.append(gen[i][ind])
-                strA.append(gen[i + 1][ind])
-
-        ret.append("".join(strA))
-        ret.append("".join(strB))
-    return ret
-
-
-def threshold_nodes_on_fitness_percentile(
-    in_nodes: list[RolloutNode], 
-    threshold: float,
-    debug: bool = False,
-    ) -> list[RolloutNode]:
-    """Get all sequences within `threshold` percentile of the top_fitness."""
-    in_seq_scores = np.array([node.fitness for node in in_nodes])
-    in_seqs = [node.seq for node in in_nodes]
-    
-    top_fitness = in_seq_scores.max()
-    parent_mask = in_seq_scores >= top_fitness * (1 - np.sign(top_fitness) * threshold)
-    parent_inds = np.argwhere(parent_mask).flatten()
-    out_nodes = [in_nodes[i] for i in parent_inds]
-    
-    if debug:
-        print(f'Thresholding went from {len(in_seqs)} to {len(out_nodes)}')
-    
-    return out_nodes
-
-
-def softmax(x):
-    """
-    Computes the softmax function in a numerically stable way.
-
-    Args:
-        x: A NumPy array of any shape.
-
-    Returns:
-        A NumPy array with the same shape as x, where each element is the softmax of the corresponding row.
-    """
-    # Subtract the maximum value for numerical stability
-    x_shifted = x - np.max(x, keepdims=True)
-    
-    # Calculate exponentials
-    exp_x = np.exp(x_shifted)
-    
-    # Normalize by the sum of exponentials
-    return exp_x / np.sum(exp_x, keepdims=True)
 
 
 def get_batched_fitness(

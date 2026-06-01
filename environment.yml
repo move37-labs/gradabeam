@@ -1,0 +1,19 @@
+name: gradabeam
+channels:
+  - conda-forge
+  - nodefaults
+dependencies:
+    - pip
+    - pytest
+    - pytest-repeat
+    - pytest-xdist
+    - pytest-cov
+    - coverage
+    - pyclean
+
+    - numpy
+    - scipy
+    - pandas
+
+    - pytorch-cpu
+    - python-xxhash

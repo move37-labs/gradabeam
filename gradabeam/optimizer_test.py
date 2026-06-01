@@ -13,6 +13,7 @@ import numpy as np
 from gradabeam import testing_utils
 
 from gradabeam.optimizer import GradaBeam
+from gradabeam.adabeam import AdaBeam
 
 
 def test_gradabeam_sanity():
@@ -110,9 +111,50 @@ def test_gradabeam_eval_batch_size_consistency():
     assert np.array_equal(scores2, scores4)
 
 
-@pytest.mark.skip(reason="Randomness causes this test to fail sometimes. Excluded AdaBeam from standalone repo.")
+@pytest.mark.skip(reason="Randomness causes this test to fail sometimes.")
 def test_no_gradient_gradabeam_is_adabeam():
-    pass
+    """Test that gradabeam with no gradients behaves like adabeam."""
+    model_fn = testing_utils.CountLetterModel(flip_sign=True)
+
+    start_seq = 'A' * 10
+    start_score = model_fn([start_seq])[0]
+    assert start_score == 0
+    
+    adabeam_args = {
+        'model_fn': model_fn,
+        'start_sequence': start_seq,
+        'beam_size': 2,
+        'n_rollouts_per_root': 4,
+        'mutations_per_sequence': 2,
+        'eval_batch_size': 1,
+        'rng_seed': 0,
+        'debug': True,
+    }
+    
+    _n_steps = 2
+    
+    # Run adabeam.
+    adabeam = AdaBeam(**adabeam_args)
+    adabeam.run(n_steps=_n_steps)
+    sample_adabeam = adabeam.get_samples(1)[0]
+    score_adabeam = model_fn([sample_adabeam])[0]
+    assert score_adabeam < start_score  # Better than the start sequence.
+    
+    # Run gradabeam with no gradient (exploration_alpha=1.0 → uniform sampling).
+    gradabeam_args = {
+        'exploration_alpha': 1.0,
+    }
+    gradabeam_args.update(adabeam_args)
+
+    gradabeam = GradaBeam(**gradabeam_args)
+    gradabeam.run(n_steps=_n_steps)
+    sample_gradabeam = gradabeam.get_samples(1)[0]
+    score_gradabeam = model_fn([sample_gradabeam])[0]
+    assert score_gradabeam < start_score  # Better than the start sequence.
+
+    # The two should be identical.
+    assert score_gradabeam == score_adabeam
+    assert sample_gradabeam == sample_adabeam
 
 class TestGradientAlignment:
 
