@@ -8,3 +8,6 @@ htmlcov/
 dist/
 build/
 *.egg-info/
+ADABEAM_DIFFERENCES.md
+REFACTOR.md
+
