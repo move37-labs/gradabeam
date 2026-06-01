@@ -14,7 +14,7 @@ from gradabeam import argparse_lib
 from gradabeam import constants
 from gradabeam import testing_utils
 
-from gradabeam.typing import ModelType, SequenceType, SamplesType
+from typing import Any
 
 from gradabeam import ada_utils
 
@@ -38,8 +38,8 @@ class GradaBeam:
 
     def __init__(
         self,
-        model_fn: ModelType,
-        start_sequence: SequenceType,
+        model_fn: Any,
+        start_sequence: str,
         mutations_per_sequence: float,
         beam_size: int,
         n_rollouts_per_root: int,
@@ -182,7 +182,7 @@ class GradaBeam:
                 alphas = [n.exploration_alpha for n in self.current_nodes]
                 print(f"[PBT] Exploration Alphas of top candidates (high is uniform): {alphas}")
 
-    def get_samples(self, n_samples: int) -> SamplesType:
+    def get_samples(self, n_samples: int) -> list[str]:
         """Get samples."""
         limit = min(n_samples, len(self.current_nodes))
         sorted_nodes = sorted(self.current_nodes, key=lambda x: x.fitness, reverse=True)

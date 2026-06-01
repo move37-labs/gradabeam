@@ -8,12 +8,10 @@ import torch
 import random
 import xxhash
 
-from gradabeam import typing
+from typing import Any
 from gradabeam import opt_utils
 
 
-SequenceType = typing.SequenceType
-TISMType = typing.TISMType
 PositionsAndCharactersType = list[tuple[int, str]]
 LogitsType = np.ndarray
 
@@ -31,13 +29,13 @@ class RolloutNode:
     `b` is the parent of `c`.
     
     """
-    seq: SequenceType
+    seq: str
     fitness: np.float32
 
 
 class ModelWrapper:
     def __init__(self, 
-                 model: typing.ModelType,
+                 model: Any,
                  use_cache: bool = False,
                  cache_limit: int = 100000,
                  debug: bool = False,

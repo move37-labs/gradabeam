@@ -10,7 +10,7 @@ from gradabeam import argparse_lib
 from gradabeam import constants
 from gradabeam import testing_utils
 
-from gradabeam.typing import ModelType, SequenceType, SamplesType
+from typing import Any
 
 from gradabeam import ada_utils
 
@@ -23,8 +23,8 @@ class AdaBeam:
 
     def __init__(
         self,
-        model_fn: ModelType,
-        start_sequence: SequenceType,
+        model_fn: Any,
+        start_sequence: str,
         mutations_per_sequence: float,
         beam_size: int,
         n_rollouts_per_root: int,
@@ -146,7 +146,7 @@ class AdaBeam:
             self.current_nodes = self.propose_sequences(self.current_nodes)
         print(f'Step {_step} current scores: {sorted([x.fitness for x in self.current_nodes], reverse=True)}')
 
-    def get_samples(self, n_samples: int) -> SamplesType:
+    def get_samples(self, n_samples: int) -> list[str]:
         """Get samples."""
         limit = min(n_samples, len(self.current_nodes))
         sorted_nodes = sorted(self.current_nodes, key=lambda x: x.fitness, reverse=True)
