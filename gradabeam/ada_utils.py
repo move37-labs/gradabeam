@@ -59,7 +59,7 @@ class ModelWrapper:
         except AttributeError:
             try:
                 self.model.model.eval()
-            except:
+            except Exception:
                 pass
         
         if self.tism_cost is not None:
@@ -92,7 +92,8 @@ class ModelWrapper:
         if self.use_cache:
             # SAFETY VALVE: Prevent infinite growth for long runs
             if len(self.cache) > self.cache_limit:
-                if self.debug: print("Cache limit reached. Flushing.")
+                if self.debug:
+                    print("Cache limit reached. Flushing.")
                 self.cache = {}
                 
             # 1) Sift sequences into seen and unseen, keeping track of their location
@@ -197,7 +198,7 @@ def num_edits_likelihood_adabeam(
     """
     assert isinstance(num_edits, np.ndarray)
     if num_edits.min() < 0 or num_edits.max() > seq_len:
-        raise ValueError(f'num_edits must be between 0 and seq_len, inclusive.')
+        raise ValueError('num_edits must be between 0 and seq_len, inclusive.')
     
     # Using the notation from above.
     F_inverse = _F_inverse(mu, seq_len)
