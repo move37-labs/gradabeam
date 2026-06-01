@@ -5,9 +5,10 @@ Runs sequence optimization using a user-specified oracle script.
 Usage
 -----
     python -m gradabeam \
+        --optimizer gradabeam \
         --oracle_script oracles/count_letter.py \
         --start_sequence AAAAAAAAAA \
-        --n_steps 10 \
+        --n_steps 1000 \
         --beam_size 2 \
         --mutations_per_sequence 2.0 \
         --n_rollouts_per_root 12
@@ -16,6 +17,7 @@ Examples
 --------
     # GradaBeam on a short sequence (count_letter oracle)
     python -m gradabeam \
+        --optimizer gradabeam \
         --oracle_script oracles/count_letter.py \
         --start_sequence AAAAAAAAAA \
         --n_steps 10 \
@@ -35,6 +37,7 @@ Examples
 
     # Load sequence from a local text file
     python -m gradabeam \
+        --optimizer gradabeam \
         --oracle_script oracles/count_letter.py \
         --start_sequence local://seq.txt \
         --n_steps 5 \
@@ -83,7 +86,7 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         '--optimizer',
         choices=list(_OPTIMIZERS),
-        required=True,
+        default='gradabeam',
         help='Which optimizer to run.',
     )
     p.add_argument(
