@@ -43,22 +43,32 @@ from gradabeam import tism
 from gradabeam import seq_utils
 
 # Constants
-VOCAB = ['A', 'C', 'G', 'T']
+VOCAB = ["A", "C", "G", "T"]
 AVAILABLE_MODELS = [
-    'ATAC', 'CTCF', 'E2F3', 'ELF4', 'GATA2', 'JUNB', 
-    'MAX', 'MECOM', 'MYC', 'OTX1', 'RAD21', 'SOX6',
+    "ATAC",
+    "CTCF",
+    "E2F3",
+    "ELF4",
+    "GATA2",
+    "JUNB",
+    "MAX",
+    "MECOM",
+    "MYC",
+    "OTX1",
+    "RAD21",
+    "SOX6",
 ]
-RECORDS = 'https://zenodo.org/records/14604495'
-CACHE_DIR = os.path.join(os.path.expanduser('~'), '.cache', 'gradabeam', 'bpnet')
+RECORDS = "https://zenodo.org/records/14604495"
+CACHE_DIR = os.path.join(os.path.expanduser("~"), ".cache", "gradabeam", "bpnet")
 
 
 def get_url(model_name: str) -> str:
     assert model_name in AVAILABLE_MODELS
-    return f'{RECORDS}/files/{model_name}.torch'
+    return f"{RECORDS}/files/{model_name}.torch"
 
 
 def get_cache_path(model_name: str) -> str:
-    return os.path.join(CACHE_DIR, f'{model_name}.torch')
+    return os.path.join(CACHE_DIR, f"{model_name}.torch")
 
 
 def download(model_name: str):
@@ -66,19 +76,23 @@ def download(model_name: str):
 
     cache_path = get_cache_path(model_name)
     if os.path.exists(cache_path):
-        print(f'Loading cached BPNet model from {cache_path}')
+        print(f"Loading cached BPNet model from {cache_path}")
         try:
-            model = torch.load(cache_path, weights_only=False, map_location=torch.device('cpu'))
+            model = torch.load(
+                cache_path, weights_only=False, map_location=torch.device("cpu")
+            )
         except Exception:
-            print('Cached file is corrupt, deleting and re-downloading...')
+            print("Cached file is corrupt, deleting and re-downloading...")
             os.remove(cache_path)
 
     if not os.path.exists(cache_path):
         url = get_url(model_name)
         os.makedirs(CACHE_DIR, exist_ok=True)
-        print(f'Downloading BPNet model for {model_name} to {cache_path}')
-        subprocess.run(['curl', url, '--output', cache_path], check=True)
-        model = torch.load(cache_path, weights_only=False, map_location=torch.device('cpu'))
+        print(f"Downloading BPNet model for {model_name} to {cache_path}")
+        subprocess.run(["curl", url, "--output", cache_path], check=True)
+        model = torch.load(
+            cache_path, weights_only=False, map_location=torch.device("cpu")
+        )
 
     model = CountWrapper(ControlWrapper(model))
     return model
@@ -109,8 +123,13 @@ class ControlWrapper(torch.nn.Module):
         if self.model.n_control_tracks == 0:
             return self.model(X)
 
-        X_ctl = torch.zeros(X.shape[0], self.model.n_control_tracks,
-            X.shape[-1], dtype=X.dtype, device=X.device)
+        X_ctl = torch.zeros(
+            X.shape[0],
+            self.model.n_control_tracks,
+            X.shape[-1],
+            dtype=X.dtype,
+            device=X.device,
+        )
         return self.model(X, X_ctl)
 
 
@@ -143,7 +162,7 @@ class BPNet(tism.TISMModelClass):
         assert m_out.ndim == 2
         assert m_out.shape[1] == 1
         ret = torch.squeeze(m_out, dim=1)
-        
+
         # Always return something that should be minimized, so flip the sign.
         ret *= -1
         return ret
@@ -155,7 +174,9 @@ class BPNet(tism.TISMModelClass):
 
     def __call__(self, x: list[str], return_debug_info: bool = False) -> np.ndarray:
         if isinstance(x, str):
-            raise ValueError(f'BPNet input needs to be list of strings, not just string: {x}')
+            raise ValueError(
+                f"BPNet input needs to be list of strings, not just string: {x}"
+            )
         ret = self.inference_on_strings(x)
         if return_debug_info:
             return ret, {}
@@ -165,6 +186,8 @@ class BPNet(tism.TISMModelClass):
 
 def make_oracle(argv=None):
     parser = argparse.ArgumentParser()
-    parser.add_argument('--protein', type=str, default='GATA2', choices=AVAILABLE_MODELS)
+    parser.add_argument(
+        "--protein", type=str, default="GATA2", choices=AVAILABLE_MODELS
+    )
     args = parser.parse_args(argv)
     return BPNet(protein=args.protein)

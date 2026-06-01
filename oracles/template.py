@@ -27,9 +27,10 @@ def make_oracle():
 
 
 class MyOracle:
-
     def __call__(self, seqs: list[str]) -> list[float]:
         raise NotImplementedError
 
-    def get_tism(self, sequence: str, idxs: list[int] | None = None) -> tuple[list[tuple[int, str]], np.ndarray]:
+    def get_tism(
+        self, sequence: str, idxs: list[int] | None = None
+    ) -> tuple[list[tuple[int, str]], np.ndarray]:
         raise NotImplementedError
