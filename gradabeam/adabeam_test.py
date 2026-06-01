@@ -10,7 +10,7 @@ import pytest
 import numpy as np
 import random
 
-from gradabeam.adabeam import AdaBeam
+from gradabeam.adabeam_optimizer import AdaBeam
 from gradabeam import testing_utils
     
 

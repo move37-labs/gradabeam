@@ -12,8 +12,8 @@ import numpy as np
 
 from gradabeam import testing_utils
 
-from gradabeam.optimizer import GradaBeam
-from gradabeam.adabeam import AdaBeam
+from gradabeam.gradabeam_optimizer import GradaBeam
+from gradabeam.adabeam_optimizer import AdaBeam
 
 
 def test_gradabeam_sanity():

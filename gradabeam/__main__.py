@@ -26,8 +26,8 @@ import argparse
 import sys
 
 from gradabeam import argparse_lib, constants, testing_utils
-from gradabeam.optimizer import GradaBeam
-from gradabeam.adabeam import AdaBeam
+from gradabeam.gradabeam_optimizer import GradaBeam
+from gradabeam.adabeam_optimizer import AdaBeam
 
 
 _OPTIMIZERS = {
