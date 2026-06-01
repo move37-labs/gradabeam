@@ -2,7 +2,7 @@
 
 To test:
 ```zsh
-pytest gradabeam/adabeam_test.py
+pytest gradabeam/adabeam_optimizer_test.py
 ```
 """
 
