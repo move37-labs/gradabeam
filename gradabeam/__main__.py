@@ -12,7 +12,8 @@ Usage
         --beam_size 2 \
         --mutations_per_sequence 2.0 \
         --exploration_alpha 0.0 \
-        --n_rollouts_per_root 4
+        --n_rollouts_per_root 4 \
+        --use_pbt True
 
 Examples
 --------
@@ -37,7 +38,8 @@ Examples
         --time_budget 300 \
         --beam_size 2 \
         --mutations_per_sequence 2.0 \
-        --n_rollouts_per_root 4 \
+        --n_rollouts_per_root 4  \
+        --use_pbt False \
         --debug True
 """
 
@@ -196,7 +198,7 @@ def _build_parser() -> argparse.ArgumentParser:
     gb.add_argument(
         '--use_pbt',
         type=argparse_lib.str_to_bool,
-        default=True,
+        required=True,
         metavar='BOOL',
         help='Enable Population Based Training for adaptive mutation rate.',
     )

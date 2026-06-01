@@ -58,13 +58,13 @@ class GradaBeam:
         beam_size: int,
         n_rollouts_per_root: int,
         exploration_alpha: float,
+        use_pbt: bool,
         max_rollout_len: int = 200,
         gradient_prob_cap: float = 0.10,
         max_logit: float = 3.0,
         rng_seed: int = 0,
         positions_to_mutate: list[int] | None = None,
         eval_batch_size: int = 1,
-        use_pbt: bool = True,
         debug: bool = False,
     ):
         self.positions_to_mutate = positions_to_mutate or list(
