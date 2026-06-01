@@ -120,11 +120,8 @@ class TestGradientAlignment:
         start_sequence = "AA" 
         
         # We want Positive Gradients (+1) for 'C'.
-        vocab = ['A','C','G','T']
-        model = testing_utils.CountLetterModel(
-            target_char='C',
-            vocab=vocab,
-        )   
+        target_char = 'C'
+        model = testing_utils.CountLetterModel(target_char=target_char)   
 
         # Initialize GradaBeam
         gb = GradaBeam(
@@ -154,7 +151,6 @@ class TestGradientAlignment:
         print(f"[Test] Algorithm chose: Pos {best_pos} -> '{best_char}' with prob {best_prob:.4f}")
         
         # ASSERTION 1: Did it pick 'C'?
-        target_char = vocab[1] # 'C'
         assert best_char == target_char, \
             f"Vocab Mismatch! Model wanted '{target_char}', but GradaBeam picked '{best_char}'."
             

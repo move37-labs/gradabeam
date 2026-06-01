@@ -10,18 +10,16 @@ from gradabeam.seq_utils import dna2tensor_batch
 class CountLetterModel(torch.nn.Module, TISMModelClass):
     """Count number of occurrences of first vocab letter."""
 
-    def __init__(self, 
-                 target_char: str = 'C', 
-                 vocab: list[str] = constants.VOCAB,
-                 ):
+    def __init__(self, target_char: str = 'C'):
         super().__init__()
-        if target_char not in vocab:
-            raise ValueError(f"target_char '{target_char}' must be in vocab {vocab}")
+        self.vocab = constants.VOCAB
+        if target_char not in self.vocab:
+            raise ValueError(f"target_char '{target_char}' must be in vocab {self.vocab}")
         self.target_char = target_char
-        self.vocab_i = vocab.index(target_char)
-        self.vocab = vocab
-        self.vocab_array = np.array(vocab)
-        self.vocab_to_idx = {nt: i for i, nt in enumerate(vocab)}
+        self.vocab_i = self.vocab.index(target_char)
+        
+        self.vocab_array = np.array(self.vocab)
+        self.vocab_to_idx = {nt: i for i, nt in enumerate(self.vocab)}
 
     def forward(self, x):
         assert x.ndim == 3
