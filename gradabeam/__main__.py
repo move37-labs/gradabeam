@@ -8,29 +8,44 @@ Usage
         --optimizer gradabeam \
         --oracle_script oracles/count_letter.py \
         --start_sequence AAAAAAAAAA \
-        --n_steps 1000 \
+        --n_steps 5_000 \
         --beam_size 2 \
         --mutations_per_sequence 2.0 \
-        --n_rollouts_per_root 12
+        --exploration_alpha 0.0 \
+        --n_rollouts_per_root 4
 
 Examples
 --------
-    # GradaBeam on a short sequence (count_letter oracle)
+    # GradaBeam with bpnet oracle, specifying a protein
+    python -m gradabeam \
+        --optimizer gradabeam \
+        --oracle_script oracles/bpnet.py \
+        --protein ATAC \
+        --start_sequence local://ATAC_start_seq.txt \
+        --n_steps 5_000 \
+        --beam_size 2 \
+        --mutations_per_sequence 2.0 \
+        --n_rollouts_per_root 4 \
+        --debug True
+
+    # GradaBeam on a short sequence (count_letter oracle), specify target character
     python -m gradabeam \
         --optimizer gradabeam \
         --oracle_script oracles/count_letter.py \
+        --target_char G \
         --start_sequence AAAAAAAAAA \
-        --n_steps 1000 \
+        --n_steps 6_000 \
         --beam_size 2 \
         --mutations_per_sequence 2.0 \
-        --n_rollouts_per_root 12
+        --exploration_alpha 0.0 \
+        --n_rollouts_per_root 4
 
     # AdaBeam variant
     python -m gradabeam \
         --optimizer adabeam \
         --oracle_script oracles/count_letter.py \
         --start_sequence AAAAAAAAAA \
-        --n_steps 1000 \
+        --n_steps 5_000 \
         --beam_size 2 \
         --mutations_per_sequence 1.0 \
         --n_rollouts_per_root 4
@@ -39,15 +54,17 @@ Examples
     python -m gradabeam \
         --optimizer gradabeam \
         --oracle_script oracles/count_letter.py \
-        --start_sequence local://seq.txt \
+        --start_sequence local://ATAC_start_seq.txt \
         --n_steps 1000 \
         --beam_size 2 \
-        --mutations_per_sequence 2.0 \
+        --mutations_per_sequence 1.0 \
         --n_rollouts_per_root 12
 """
 
 import argparse
 import importlib.util
+import inspect
+import time
 
 from gradabeam import argparse_lib
 from gradabeam.gradabeam_optimizer import GradaBeam
@@ -60,14 +77,22 @@ _OPTIMIZERS = {
 }
 
 
-def _load_oracle(path: str):
+def _load_oracle(path: str, unknown_args: list[str] | None = None):
     """Load make_oracle() from a user-supplied script file."""
     spec = importlib.util.spec_from_file_location('_user_oracle', path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     if not hasattr(module, 'make_oracle'):
         raise AttributeError(f'{path!r} must define a make_oracle() function.')
-    return module.make_oracle()
+    
+    # Check if make_oracle accepts arguments
+    sig = inspect.signature(module.make_oracle)
+    if len(sig.parameters) > 0:
+        return module.make_oracle(unknown_args)
+    else:
+        if unknown_args:
+            raise ValueError(f"Unrecognized arguments: {unknown_args}")
+        return module.make_oracle()
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -207,7 +232,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
 def main(argv=None):
     parser = _build_parser()
-    args = parser.parse_args(argv)
+    args, unknown_args = parser.parse_known_args(argv)
 
     # ------------------------------------------------------------------ #
     # Resolve start sequence and positions                                 #
@@ -223,7 +248,7 @@ def main(argv=None):
     # ------------------------------------------------------------------ #
     # Load custom oracle                                                   #
     # ------------------------------------------------------------------ #
-    model_fn = _load_oracle(args.oracle_script)
+    model_fn = _load_oracle(args.oracle_script, unknown_args)
 
     # ------------------------------------------------------------------ #
     # Print run summary                                                    #
@@ -276,18 +301,23 @@ def main(argv=None):
     # ------------------------------------------------------------------ #
     # Run                                                                  #
     # ------------------------------------------------------------------ #
+    start_time = time.perf_counter()
     optimizer.run(n_steps=args.n_steps)
+    total_step_time = time.perf_counter() - start_time
+    time_per_step = total_step_time / args.n_steps
 
     # ------------------------------------------------------------------ #
     # Output                                                               #
     # ------------------------------------------------------------------ #
     top_seqs = optimizer.get_samples(args.n_output_seqs)
-    print(f'\nTop {len(top_seqs)} sequence(s) after {args.n_steps} step(s):')
-    for rank, seq in enumerate(top_seqs, 1):
-        n_c = seq.count('C')
-        frac_c = n_c / len(seq)
+    print(
+        f'\nTop {len(top_seqs)} sequence(s) after {args.n_steps} step(s) '
+        f'({total_step_time:.2f}s in optimizer steps), ({time_per_step:.2f}s per step):'
+    )
+    scores = model_fn(top_seqs)
+    for rank, (seq, score) in enumerate(zip(top_seqs, scores), 1):
         print(f'  [{rank}] {seq[:80]}{"..." if len(seq) > 80 else ""}  '
-              f'(C-count: {n_c}, C-frac: {frac_c:.2%})')
+              f'(oracle score: {score:.4f})')
 
 
 if __name__ == '__main__':
