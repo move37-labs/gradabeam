@@ -185,7 +185,9 @@ class AdaBeam:
 
         # Propose the top `self.beam_size` new sequences we have generated.
         # Break fitness ties using sequence string to ensure deterministic behavior.
-        sorted_sequences = sorted(sequences, key=lambda x: (x.fitness, x.seq), reverse=True)
+        sorted_sequences = sorted(
+            sequences, key=lambda x: (x.fitness, x.seq), reverse=True
+        )
         top_nodes = sorted_sequences[: self.beam_size]
 
         return top_nodes
