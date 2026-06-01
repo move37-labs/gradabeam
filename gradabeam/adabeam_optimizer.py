@@ -3,10 +3,8 @@
 Adaptive beam, adaptive mutation rate, adaptive directed evolution.
 """
 
-import argparse
 import numpy as np
 
-from gradabeam import argparse_lib
 from gradabeam import constants
 from gradabeam import testing_utils
 

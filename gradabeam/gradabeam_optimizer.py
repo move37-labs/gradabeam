@@ -3,14 +3,12 @@
 Gradient-guided adaptive beam, adaptive mutation rate (PBT), adaptive directed evolution.
 """
 
-import argparse
 import numpy as np
 from scipy.special import softmax
 import dataclasses
 from dataclasses import field
-from functools import lru_cache # Added for PBT sampler caching
+from functools import lru_cache
 
-from gradabeam import argparse_lib
 from gradabeam import constants
 from gradabeam import testing_utils
 

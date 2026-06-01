@@ -1,8 +1,8 @@
-"""Tests for gradabeam.py
+"""Tests for gradabeam_optimizer.py
 
 To test:
 ```zsh
-pytest gradabeam/optimizer_test.py
+pytest gradabeam/gradabeam_optimizer_test.py
 ```
 """
 
