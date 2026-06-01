@@ -23,13 +23,13 @@ dependencies = [
     "scipy",
     "torch>=2.2",
     "xxhash",
-    "pandas",
-    "pyarrow",
 ]
 
 [project.optional-dependencies]
 dev = [
     "pytest",
+    "mypy",
+    "ruff",
 ]
 
 [tool.setuptools.packages.find]
@@ -39,3 +39,9 @@ include = ["gradabeam", "gradabeam.*"]
 [tool.pytest.ini_options]
 testpaths = ["gradabeam"]
 python_files = "*_test.py"
+
+[tool.mypy]
+ignore_missing_imports = true
+warn_unused_configs = true
+show_error_codes = true
+
