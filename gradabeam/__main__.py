@@ -173,46 +173,47 @@ def _build_parser() -> argparse.ArgumentParser:
     # ------------------------------------------------------------------ #
     # GradaBeam-only args                                                  #
     # ------------------------------------------------------------------ #
-    gb = p.add_argument_group('GradaBeam-only options')
+    gb = p.add_argument_group('GradaBeam-only options (ignored for adabeam)')
     gb.add_argument(
         '--exploration_alpha',
         type=float,
-        default=0.5,
+        default=None,
         help=(
             'Mix between gradient-guided (0.0) and uniform-random (1.0) mutations. '
-            'Adaptively updated by PBT when --use_pbt is true.'
+            'Adaptively updated by PBT when --use_pbt is true. '
+            '[default: 0.5]'
         ),
     )
     gb.add_argument(
         '--gradient_prob_cap',
         type=float,
-        default=0.10,
-        help='Per-action probability cap applied after softmax.',
+        default=None,
+        help='Per-action probability cap applied after softmax. [default: 0.10]',
     )
     gb.add_argument(
         '--max_logit',
         type=float,
-        default=3.0,
-        help='Dynamic temperature ceiling for TISM logit scaling.',
+        default=None,
+        help='Dynamic temperature ceiling for TISM logit scaling. [default: 3.0]',
     )
     gb.add_argument(
         '--use_pbt',
         type=argparse_lib.str_to_bool,
-        required=True,
+        default=None,
         metavar='BOOL',
-        help='Enable Population Based Training for adaptive mutation rate.',
+        help='Enable Population Based Training for adaptive mutation rate. Required for gradabeam.',
     )
 
     # ------------------------------------------------------------------ #
     # AdaBeam-only args                                                    #
     # ------------------------------------------------------------------ #
-    ab = p.add_argument_group('AdaBeam-only options')
+    ab = p.add_argument_group('AdaBeam-only options (ignored for gradabeam)')
     ab.add_argument(
         '--skip_repeat_sequences',
         type=argparse_lib.str_to_bool,
-        default=False,
+        default=None,
         metavar='BOOL',
-        help='Skip sequences already evaluated during rollouts.',
+        help='Skip sequences already evaluated during rollouts. [default: False]',
     )
 
     return p
@@ -274,17 +275,19 @@ def main(argv=None):
     # Instantiate optimizer                                                #
     # ------------------------------------------------------------------ #
     if args.optimizer == 'gradabeam':
+        if args.use_pbt is None:
+            parser.error('--use_pbt is required when --optimizer is gradabeam')
         optimizer = GradaBeam(
             **shared_kwargs,
-            exploration_alpha=args.exploration_alpha,
-            gradient_prob_cap=args.gradient_prob_cap,
-            max_logit=args.max_logit,
+            exploration_alpha=args.exploration_alpha if args.exploration_alpha is not None else 0.5,
+            gradient_prob_cap=args.gradient_prob_cap if args.gradient_prob_cap is not None else 0.10,
+            max_logit=args.max_logit if args.max_logit is not None else 3.0,
             use_pbt=args.use_pbt,
         )
     elif args.optimizer == 'adabeam':
         optimizer = AdaBeam(
             **shared_kwargs,
-            skip_repeat_sequences=args.skip_repeat_sequences,
+            skip_repeat_sequences=args.skip_repeat_sequences if args.skip_repeat_sequences is not None else False,
         )
     else:
         parser.error(f'Unknown optimizer: {args.optimizer}')
