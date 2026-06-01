@@ -41,21 +41,6 @@ class ArgparseLibTest(unittest.TestCase):
         path = f"local://{tmp_file}"
         self.assertEqual(argparse_lib.possibly_parse_start_sequence(path), seq)
 
-    @mock.patch("gradabeam.argparse_lib.fetch_zenodo_enformer_start_sequence_df")
-    def test_parse_start_sequence_from_gcp(self, mock_fetch_df):
-        """Test fetching a sequence from the mocked GCP DataFrame."""
-        mock_df = pd.DataFrame(
-            {
-                "sequence": ["ATGC", "GATTACA"],
-            },
-            index=[0, 1],
-        )
-        mock_fetch_df.return_value = mock_df
-
-        path = "enformer://1"
-        self.assertEqual(argparse_lib.possibly_parse_start_sequence(path), "GATTACA")
-        mock_fetch_df.assert_called_once()
-
     # Tests for possibly_parse_positions_to_mutate
     # ================================================
 
@@ -78,19 +63,6 @@ class ArgparseLibTest(unittest.TestCase):
         self.assertEqual(
             argparse_lib.possibly_parse_positions_to_mutate(path), positions
         )
-
-    @mock.patch("gradabeam.argparse_lib.fetch_zenodo_enformer_start_sequence_df")
-    def test_parse_positions_to_mutate_from_gcp(self, mock_fetch_df):
-        """Test fetching positions from the mocked GCP DataFrame."""
-        mock_df = pd.DataFrame(
-            {"positions_to_mutate": [np.array([1, 2]), np.array([3, 4])]}, index=[0, 1]
-        )
-        mock_fetch_df.return_value = mock_df
-
-        path = "enformer://0"
-        # The function should convert the numpy array to a list of ints
-        self.assertEqual(argparse_lib.possibly_parse_positions_to_mutate(path), [1, 2])
-        mock_fetch_df.assert_called_once()
 
     def test_parse_positions_to_mutate_empty_and_none(self):
         """Test that empty or None inputs return None."""

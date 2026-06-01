@@ -159,11 +159,6 @@ The `--start_sequence` (and `--positions_to_mutate`) flags support two special p
 python -m gradabeam --oracle_script oracles/count_letter.py \
     --start_sequence local://path/to/seq.txt \
     --n_steps 5 --beam_size 5 --mutations_per_sequence 2.0 --n_rollouts_per_root 4 --use_pbt True
-
-# Load from the Zenodo Enformer dataset used in the publication (requires network)
-python -m gradabeam --oracle_script oracles/count_letter.py \
-    --start_sequence enformer://12 \
-    --n_steps 5 --beam_size 5 --mutations_per_sequence 2.0 --n_rollouts_per_root 4 --use_pbt True
 ```
 
 See all options:

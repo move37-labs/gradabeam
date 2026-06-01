@@ -8,13 +8,13 @@ def get_locations_to_edit(
     random_n_loc: int,
     rng: np.random.Generator,
     method: str,
-) -> list[int]:
+) -> np.ndarray:
     """Selects locations to edit."""
     assert random_n_loc > 0
     assert random_n_loc <= len(positions_to_mutate)
 
     if method == "all":
-        return positions_to_mutate
+        return np.array(positions_to_mutate)
     elif method == "random":
         return rng.choice(positions_to_mutate, size=random_n_loc, replace=False)
     else:
@@ -23,7 +23,7 @@ def get_locations_to_edit(
 
 def generate_single_mutant_multiedits(
     base_str: str,
-    locs_to_edit: list[int],
+    locs_to_edit: list[int] | np.ndarray,
     alphabet: list[str],
     rng: np.random.Generator,
 ) -> str:

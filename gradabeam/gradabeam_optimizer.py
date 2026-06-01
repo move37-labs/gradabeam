@@ -222,8 +222,9 @@ class GradaBeam:
 
     def propose_sequences(self, root_nodes: list[RolloutNode]) -> list[RolloutNode]:
         """Propose top `beam_size` sequences for evaluation."""
-        nodes_visited, rollout_lengths = set(), []
-        gradient_node_cache = {}
+        nodes_visited: set[RolloutNodeWithProbs] = set()
+        rollout_lengths: list[int] = []
+        gradient_node_cache: dict[str, RolloutNodeWithProbs] = {}
 
         root_nodes_effective = root_nodes * self.n_rollouts_per_root
         for i in range(0, len(root_nodes_effective), self.eval_batch_size):
@@ -248,8 +249,8 @@ class GradaBeam:
         if len(nodes_visited) == 0:
             raise ValueError("No nodes generated.")
 
-        nodes_visited = sorted(nodes_visited, key=lambda x: x.sort_key, reverse=True)
-        top_nodes = nodes_visited[: self.beam_size]
+        sorted_nodes = sorted(nodes_visited, key=lambda x: x.sort_key, reverse=True)
+        top_nodes = sorted_nodes[: self.beam_size]
 
         return top_nodes
 
@@ -323,6 +324,8 @@ class GradaBeam:
 
         seqs, new_probs, num_edits_effective, child_alphas = [], [], [], []
         for node, num_edits in zip(nodes, num_edit_locs):
+            assert node.probs is not None
+            assert node.pos_and_chars is not None
             num_available = (node.probs > 0).sum()
             effective_num_edits = min(num_edits, num_available)
             assert effective_num_edits > 0
@@ -377,7 +380,7 @@ class GradaBeam:
         return [
             RolloutNode(
                 seq=seq,
-                fitness=float(f),
+                fitness=np.float32(float(f)),
                 probs=probs,
                 edits_since_root=n.edits_since_root + int(num_edits),
                 pos_and_chars=n.pos_and_chars,
@@ -400,7 +403,7 @@ class GradaBeam:
     # (Functions below can remain identical to the original)
     def probabilities_over_actions_from_tism(
         self, nodes: list[RolloutNode]
-    ) -> tuple[list[float], list[PositionsAndCharactersType]]:
+    ) -> tuple[list[np.ndarray], list[PositionsAndCharactersType]]:
         # ... [Same as original] ...
         probs_list, pos_and_chars_list = [], []
         for n in nodes:

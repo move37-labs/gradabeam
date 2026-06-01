@@ -7,7 +7,7 @@ from scipy.stats import binom
 import torch
 import xxhash
 
-from typing import Any
+from typing import Any, Callable
 from gradabeam import opt_utils
 
 
@@ -48,10 +48,10 @@ class ModelWrapper:
                 "Model must have tism_torch method. This is required for optimized get_tisms."
             )
         self.model = model
-        self.cost = 0
+        self.cost: float = 0
         self.use_cache = use_cache
         self.cache_limit = cache_limit
-        self.cache = {}
+        self.cache: dict[int, float] = {}
         self.debug = debug
         self.tism_cost = tism_cost
 
@@ -79,10 +79,12 @@ class ModelWrapper:
 
         # The above is stochastic. Work around it.
         del start_sequence  # Unused.
+        torch_opt_fn: Any
         if "Rinalmo" in type(self.model).__name__:
-            self.torch_opt_fn = torch.no_grad
+            torch_opt_fn = torch.no_grad
         else:
-            self.torch_opt_fn = torch.inference_mode
+            torch_opt_fn = torch.inference_mode
+        self.torch_opt_fn: Any = torch_opt_fn
 
     def str_in_cache(self, seq: str) -> bool:
         """Check if a sequence is in the cache."""
@@ -222,7 +224,7 @@ class NumberEditsSampler(object):
         self,
         sequence_len: int,
         mutation_rate: float,
-        likelihood_fn: callable,
+        likelihood_fn: Callable[..., Any],
         rng_seed: int = 0,
     ):
 
@@ -238,7 +240,7 @@ class NumberEditsSampler(object):
         """Returns the expected number of edits."""
         return np.sum(self.num_edits * self.probs)
 
-    def sample(self, n_samples: int) -> list[int]:
+    def sample(self, n_samples: int) -> np.ndarray:
         # OPTIMIZATION: Use numpy array directly - faster than converting from list.
         return self.rng.choice(self.num_edits, size=n_samples, p=self.probs)
 
