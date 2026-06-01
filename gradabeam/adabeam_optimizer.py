@@ -140,7 +140,6 @@ class AdaBeam:
     def run(self, n_steps: int):
         for _step in range(n_steps):
             self.current_nodes = self.propose_sequences(self.current_nodes)
-        print(f'Step {_step} current scores: {sorted([x.fitness for x in self.current_nodes], reverse=True)}')
 
     def get_samples(self, n_samples: int) -> list[str]:
         """Get samples."""
