@@ -8,7 +8,7 @@ Usage
         --optimizer gradabeam \
         --oracle_script oracles/count_letter.py \
         --start_sequence AAAAAAAAAA \
-        --n_steps 5_000 \
+        --time_budget 15 \
         --beam_size 2 \
         --mutations_per_sequence 2.0 \
         --exploration_alpha 0.0 \
@@ -16,49 +16,29 @@ Usage
 
 Examples
 --------
-    # GradaBeam with bpnet oracle, specifying a protein
+
+    # AdaBeam on substring_count — adaptive search; also shows oracle-arg passthrough
+    python -m gradabeam \
+        --optimizer adabeam \
+        --oracle_script oracles/substring_count.py \
+        --substring ATGTC \
+        --start_sequence AAAAAAAAAAAAAAAAAAAA \
+        --time_budget 15 \
+        --beam_size 2 \
+        --mutations_per_sequence 1.0 \
+        --n_rollouts_per_root 4
+
+    # GradaBeam with the BPNet neural-network oracle on a real biological sequence
     python -m gradabeam \
         --optimizer gradabeam \
         --oracle_script oracles/bpnet.py \
         --protein ATAC \
         --start_sequence local://ATAC_start_seq.txt \
-        --n_steps 5_000 \
+        --time_budget 300 \
         --beam_size 2 \
         --mutations_per_sequence 2.0 \
         --n_rollouts_per_root 4 \
         --debug True
-
-    # GradaBeam on a short sequence (count_letter oracle), specify target character
-    python -m gradabeam \
-        --optimizer gradabeam \
-        --oracle_script oracles/count_letter.py \
-        --target_char G \
-        --start_sequence AAAAAAAAAA \
-        --n_steps 6_000 \
-        --beam_size 2 \
-        --mutations_per_sequence 2.0 \
-        --exploration_alpha 0.0 \
-        --n_rollouts_per_root 4
-
-    # AdaBeam variant
-    python -m gradabeam \
-        --optimizer adabeam \
-        --oracle_script oracles/count_letter.py \
-        --start_sequence AAAAAAAAAA \
-        --n_steps 5_000 \
-        --beam_size 2 \
-        --mutations_per_sequence 1.0 \
-        --n_rollouts_per_root 4
-
-    # Load sequence from a local text file
-    python -m gradabeam \
-        --optimizer gradabeam \
-        --oracle_script oracles/count_letter.py \
-        --start_sequence local://ATAC_start_seq.txt \
-        --n_steps 1000 \
-        --beam_size 2 \
-        --mutations_per_sequence 1.0 \
-        --n_rollouts_per_root 12
 """
 
 import argparse
@@ -141,11 +121,17 @@ def _build_parser() -> argparse.ArgumentParser:
             'Defaults to all positions.'
         ),
     )
-    p.add_argument(
+    termination = p.add_mutually_exclusive_group(required=True)
+    termination.add_argument(
         '--n_steps',
         type=int,
-        required=True,
         help='Number of optimization steps to run.',
+    )
+    termination.add_argument(
+        '--time_budget',
+        type=float,
+        metavar='SECONDS',
+        help='Wall-clock time budget in seconds (alternative to --n_steps).',
     )
     p.add_argument(
         '--n_output_seqs',
@@ -258,7 +244,10 @@ def main(argv=None):
     print(f'Sequence ({len(start_sequence):,} bp)  : {seq_display}')
     print(f'Mutable positions    : {n_mutable}')
     print(f'Mutations/step       : {mutations_per_sequence:.2f}')
-    print(f'Steps                : {args.n_steps}')
+    if args.n_steps is not None:
+        print(f'Steps                : {args.n_steps}')
+    else:
+        print(f'Time budget          : {args.time_budget}s')
     print(f'Beam size            : {args.beam_size}')
     print(f'Oracle               : {args.oracle_script}')
     print()
@@ -302,16 +291,26 @@ def main(argv=None):
     # Run                                                                  #
     # ------------------------------------------------------------------ #
     start_time = time.perf_counter()
-    optimizer.run(n_steps=args.n_steps)
+    steps_run = 0
+
+    if args.n_steps is not None:
+        optimizer.run(n_steps=args.n_steps)
+        steps_run = args.n_steps
+    else:
+        deadline = start_time + args.time_budget
+        while time.perf_counter() < deadline:
+            optimizer.run(n_steps=1)
+            steps_run += 1
+
     total_step_time = time.perf_counter() - start_time
-    time_per_step = total_step_time / args.n_steps
+    time_per_step = total_step_time / steps_run if steps_run else 0.0
 
     # ------------------------------------------------------------------ #
     # Output                                                               #
     # ------------------------------------------------------------------ #
     top_seqs = optimizer.get_samples(args.n_output_seqs)
     print(
-        f'\nTop {len(top_seqs)} sequence(s) after {args.n_steps} step(s) '
+        f'\nTop {len(top_seqs)} sequence(s) after {steps_run} step(s) '
         f'({total_step_time:.2f}s in optimizer steps), ({time_per_step:.2f}s per step):'
     )
     scores = model_fn(top_seqs)
