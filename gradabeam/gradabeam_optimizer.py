@@ -96,8 +96,8 @@ class GradaBeam:
             edits_since_root=0, 
             probs=None, 
             pos_and_chars=None,
-            mutations_per_sequence=float(mutations_per_sequence), # [PBT Modification]
-            exploration_alpha=float(exploration_alpha) # [PBT Modification]
+            mutations_per_sequence=float(mutations_per_sequence),
+            exploration_alpha=float(exploration_alpha),
         )
         
         # Initialize with gradient-based mutations
