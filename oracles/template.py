@@ -9,7 +9,7 @@ Interface
 make_oracle() must return an object with:
 
 - __call__(seqs: list[str]) -> list[float]
-      Fitness score for each sequence. Higher = better.
+      Fitness score for each sequence. Lower = better.
       Required by both GradaBeam and AdaBeam.
 
 - get_tism(sequence: str, idxs: list[int] | None)

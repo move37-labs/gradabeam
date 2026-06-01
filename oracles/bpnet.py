@@ -1,6 +1,27 @@
 """BPNet oracle for gradabeam.
 
 Taken from nucleobench/models/bpnet in git remote public-base.
+
+Predicts binding counts for various transcription factors or proteins.
+
+Run:
+
+    python -m gradabeam --oracle_script oracles/bpnet.py \
+        --start_sequence local://ATAC_start_seq.txt \
+        --time_budget 300 --beam_size 2 --mutations_per_sequence 2.0 \
+        --n_rollouts_per_root 4 --debug True -- --protein ATAC
+
+Interface
+---------
+make_oracle() returns an object with:
+
+- __call__(seqs: list[str]) -> list[float]
+      Fitness score for each sequence. Lower = better (negated count prediction).
+      Required by both GradaBeam and AdaBeam.
+
+- get_tism(sequence: str, idxs: list[int] | None)
+      -> tuple[list[tuple[int, str]], np.ndarray]
+      Required only for GradaBeam (gradient-guided mutations).
 """
 
 import argparse
