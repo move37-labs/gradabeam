@@ -3,17 +3,8 @@ channels:
   - conda-forge
   - nodefaults
 dependencies:
-    - pip
-    - pytest
-    - pytest-repeat
-    - pytest-xdist
-    - pytest-cov
-    - coverage
-    - pyclean
-
-    - numpy
-    - scipy
-    - pandas
-
-    - pytorch-cpu
-    - python-xxhash
+  - python=3.11
+  - pytorch-cpu
+  - pip
+  - pip:
+      - -e .[dev,examples]

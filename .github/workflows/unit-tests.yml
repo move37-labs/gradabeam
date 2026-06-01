@@ -28,7 +28,7 @@ jobs:
 
       - name: Install package
         shell: micromamba-shell {0}
-        run: pip install -e .
+        run: pip install -e .[dev,examples]
 
       - name: Run unit tests
         shell: micromamba-shell {0}

@@ -28,8 +28,15 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "pytest",
+    "pytest-repeat",
+    "pytest-xdist",
+    "pytest-cov",
+    "coverage",
     "mypy",
     "ruff",
+]
+examples = [
+    "bpnet-lite",
 ]
 
 [tool.setuptools.packages.find]

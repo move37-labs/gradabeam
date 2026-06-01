@@ -25,12 +25,20 @@ From PyPI:
 pip install gradabeam
 ```
 
+To run the built-in examples (e.g. BPNet), install the `examples` extra:
+
+```bash
+pip install "gradabeam[examples]"
+```
+
 From source:
 
 ```bash
 git clone https://github.com/move37-labs/gradabeam
 cd gradabeam
 pip install -e .
+# Or, to include examples:
+# pip install -e ".[examples]"
 ```
 
 ## Quick Start
@@ -146,6 +154,16 @@ See `gradabeam.tism.TISMModelClass` for a reference implementation you can inher
 | `exploration_alpha` | GradaBeam | Blend of uniform (1.0) vs. gradient-guided (0.0) mutations. |
 | `use_pbt` | GradaBeam | Enable Population Based Training for adaptive mutation rate. |
 | `skip_repeat_sequences` | AdaBeam | Skip already-evaluated sequences during rollouts. |
+
+## Development
+
+If you want to contribute to `gradabeam` or run the tests locally, we recommend using `mamba` (or `conda`) to set up the development environment:
+
+```bash
+micromamba create -f environment.yml
+micromamba activate gradabeam
+pytest gradabeam/
+```
 
 ## Running Tests
 
