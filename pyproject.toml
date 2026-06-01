@@ -19,7 +19,7 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 dependencies = [
-    "numpy>=1.16,<2.0.0",
+    "numpy>=1.16,<3.0.0",
     "scipy",
     "torch>=2.2",
     "xxhash",
