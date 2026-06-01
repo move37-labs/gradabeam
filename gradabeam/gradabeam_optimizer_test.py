@@ -122,7 +122,7 @@ class TestGradientAlignment:
         # We want Positive Gradients (+1) for 'C'.
         vocab = ['A','C','G','T']
         model = testing_utils.CountLetterModel(
-            vocab_i=1,  # Target 'C'
+            target_char='C',
             flip_sign=True,
             vocab=vocab,
         )   
