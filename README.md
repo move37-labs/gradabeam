@@ -3,18 +3,13 @@
 [![bioRxiv](https://img.shields.io/badge/bioRxiv-10.1101%2F2025.06.20.660785-b31b1b.svg)](https://www.biorxiv.org/content/10.1101/2025.06.20.660785)
 [![codecov](https://codecov.io/gh/move37-labs/gradabeam/graph/badge.svg)](https://codecov.io/gh/move37-labs/gradabeam)
 
-Gradient-guided adaptive beam search optimizer with Population Based Training (PBT), for nucleic acid (DNA) sequence design.
+Gradient-guided adaptive beam search optimizer with Population Based Training (PBT), for nucleic acid sequence design.
 
 GrAdaBeam is the design algorithm introduced in
-[**"GrAdaBeam: Combining model gradients with evolutionary search for generalizable nucleic acid design"** (Shor, Strand & McLean, bioRxiv 2025.06.20.660785)](https://www.biorxiv.org/content/10.1101/2025.06.20.660785).
+[**"GrAdaBeam: Combining model gradients with evolutionary search for generalizable nucleic acid design"**](https://www.biorxiv.org/content/10.1101/2025.06.20.660785).
 It unifies the broad exploration of evolutionary search with the precise guidance of model gradients, and statistically
 outperformed seven other design algorithms across the [NucleoBench](https://github.com/move37-labs/nucleobench)
 benchmark.
-
-This package is a standalone extraction of the GrAdaBeam and AdaBeam optimizers from
-[nucleobench](https://github.com/move37-labs/nucleobench). For the full benchmark, the other design algorithms,
-the biological tasks, and cloud-scale runners, see the
-[nucleobench repository](https://github.com/move37-labs/nucleobench).
 
 ## Overview
 
