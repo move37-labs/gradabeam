@@ -145,7 +145,8 @@ class AdaBeam:
     def get_samples(self, n_samples: int) -> list[str]:
         """Get samples."""
         limit = min(n_samples, len(self.current_nodes))
-        sorted_nodes = sorted(self.current_nodes, key=lambda x: x.fitness, reverse=True)
+        # Break fitness ties using sequence string to ensure deterministic behavior.
+        sorted_nodes = sorted(self.current_nodes, key=lambda x: (x.fitness, x.seq), reverse=True)
         return [x.seq for x in sorted_nodes][:limit]
 
     def propose_sequences(self, root_nodes: list[RolloutNode]) -> list[RolloutNode]:
@@ -184,7 +185,8 @@ class AdaBeam:
             raise ValueError("No sequences generated.")
         
         # Propose the top `self.beam_size` new sequences we have generated.
-        sequences = sorted(sequences, key=lambda x: x.fitness, reverse=True)
+        # Break fitness ties using sequence string to ensure deterministic behavior.
+        sequences = sorted(sequences, key=lambda x: (x.fitness, x.seq), reverse=True)
         top_nodes = sequences[: self.beam_size]
         
         return top_nodes
