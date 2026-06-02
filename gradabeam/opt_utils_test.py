@@ -26,7 +26,8 @@ def _make_node(seq: str, fitness: float) -> ada_utils.RolloutNode:
     return ada_utils.RolloutNode(seq=seq, fitness=np.float32(fitness))
 
 
-_SORT_KEY = lambda x: (x.fitness, x.seq)
+def _SORT_KEY(x):
+    return (x.fitness, x.seq)
 
 
 def test_best_ever_top_k_by_fitness():
