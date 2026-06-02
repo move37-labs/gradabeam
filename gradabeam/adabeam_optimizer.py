@@ -8,6 +8,7 @@ from typing import Any
 
 from gradabeam import ada_utils
 from gradabeam import constants
+from gradabeam import opt_utils
 from gradabeam import testing_utils
 
 
@@ -94,6 +95,12 @@ class AdaBeam:
                 )
             )
 
+        # Track best-ever sequences across the whole run; seed with generation 0.
+        self.best_ever = opt_utils.BestEver(
+            sort_key=lambda x: (x.fitness, x.seq), capacity=self.beam_size
+        )
+        self.best_ever.update(self.current_nodes)
+
     def get_batched_fitness(self, sequences: list[str]) -> np.ndarray:
         """Get fitness for a batch of sequences."""
         return ada_utils.get_batched_fitness(
@@ -136,17 +143,13 @@ class AdaBeam:
     def run(self, n_steps: int):
         for _step in range(n_steps):
             self.current_nodes = self.propose_sequences(self.current_nodes)
+            self.best_ever.update(self.current_nodes)
             if self.debug and len(self.current_nodes) > 0:
                 print(f"Step {_step} top score: {self.current_nodes[0].fitness}")
 
     def get_samples(self, n_samples: int) -> list[str]:
-        """Get samples."""
-        limit = min(n_samples, len(self.current_nodes))
-        # Break fitness ties using sequence string to ensure deterministic behavior.
-        sorted_nodes = sorted(
-            self.current_nodes, key=lambda x: (x.fitness, x.seq), reverse=True
-        )
-        return [x.seq for x in sorted_nodes][:limit]
+        """Get the best-ever samples found across the run."""
+        return [x.seq for x in self.best_ever.best(n_samples)]
 
     def propose_sequences(self, root_nodes: list[RolloutNode]) -> list[RolloutNode]:
         """Propose top `beam_size` sequences for evaluation."""

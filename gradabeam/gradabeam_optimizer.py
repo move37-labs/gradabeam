@@ -11,6 +11,7 @@ from dataclasses import field
 from functools import lru_cache
 
 from gradabeam import constants
+from gradabeam import opt_utils
 from gradabeam import testing_utils
 from gradabeam import ada_utils
 
@@ -147,6 +148,12 @@ class GradaBeam:
                 )
             )
 
+        # Track best-ever sequences across the whole run; seed with generation 0.
+        self.best_ever = opt_utils.BestEver(
+            sort_key=lambda x: (x.fitness, x.seq), capacity=self.beam_size
+        )
+        self.best_ever.update(self.current_nodes)
+
     def get_sampler(
         self, mutations_per_sequence: float
     ) -> ada_utils.NumberEditsSampler:
@@ -203,6 +210,7 @@ class GradaBeam:
     def run(self, n_steps: int):
         for _step in range(n_steps):
             self.current_nodes = self.propose_sequences(self.current_nodes)
+            self.best_ever.update(self.current_nodes)
             if self.debug and len(self.current_nodes) > 0:
                 print(f"Step {_step} top score: {self.current_nodes[0].fitness}")
                 rates = [n.mutations_per_sequence for n in self.current_nodes]
@@ -213,12 +221,8 @@ class GradaBeam:
                 )
 
     def get_samples(self, n_samples: int) -> list[str]:
-        """Get samples."""
-        limit = min(n_samples, len(self.current_nodes))
-        sorted_nodes = sorted(
-            self.current_nodes, key=lambda x: x.sort_key, reverse=True
-        )
-        return [x.seq for x in sorted_nodes][:limit]
+        """Get the best-ever samples found across the run."""
+        return [x.seq for x in self.best_ever.best(n_samples)]
 
     def propose_sequences(self, root_nodes: list[RolloutNode]) -> list[RolloutNode]:
         """Propose top `beam_size` sequences for evaluation."""

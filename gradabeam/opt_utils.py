@@ -1,6 +1,43 @@
 """Common utils for optimization algorithms."""
 
+from typing import Any, Callable
+
 import numpy as np
+
+
+class BestEver:
+    """Bounded record of the best-fitness unique sequences seen across a run.
+
+    Deduplicates by sequence string (fitness is deterministic in the sequence,
+    so a recurring sequence has the same score). Intended to be updated once per
+    optimization step from the selected beam -- NOT inside the oracle inner loop.
+    Reuses the caller's sort_key so ordering matches get_samples exactly.
+
+    Memory is bounded by the largest `n` ever passed to `best()`, which is a
+    fixed config value (proposals_per_round), i.e. on the order of a dozen nodes.
+    """
+
+    def __init__(self, sort_key: Callable[[Any], Any], capacity: int):
+        assert capacity >= 1
+        self._sort_key = sort_key          # node -> orderable key; the designer's own
+        self._capacity = capacity          # grows lazily to the largest n requested
+        self._by_seq: dict[str, Any] = {}  # sequence string -> node
+
+    def update(self, nodes: list) -> None:
+        """Merge a beam's nodes in. Called once per step."""
+        for n in nodes:
+            # Deterministic fitness => overwriting a recurring seq is value-identical
+            # for ordering purposes (see note in get_samples about PBT fields).
+            self._by_seq[n.seq] = n
+        if len(self._by_seq) > self._capacity:
+            kept = sorted(self._by_seq.values(), key=self._sort_key, reverse=True)
+            self._by_seq = {n.seq: n for n in kept[: self._capacity]}
+
+    def best(self, n: int) -> list:
+        """Return up to `n` nodes, highest fitness first."""
+        self._capacity = max(self._capacity, n)  # never prune below what's been requested
+        nodes = sorted(self._by_seq.values(), key=self._sort_key, reverse=True)
+        return nodes[: min(n, len(nodes))]
 
 
 def get_locations_to_edit(
