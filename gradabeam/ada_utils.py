@@ -1,6 +1,7 @@
 """Common utilities for [Gr]Ada*."""
 
 import dataclasses
+from collections import OrderedDict
 
 import numpy as np
 from scipy.stats import binom
@@ -49,9 +50,11 @@ class ModelWrapper:
             )
         self.model = model
         self.cost: float = 0
+        self.n_forward: int = 0
+        self.n_backward: int = 0
         self.use_cache = use_cache
         self.cache_limit = cache_limit
-        self.cache: dict[int, float] = {}
+        self.cache: OrderedDict[int, float] = OrderedDict()
         self.debug = debug
         self.tism_cost = tism_cost
 
@@ -95,19 +98,14 @@ class ModelWrapper:
         self.cost += len(m_input)
 
         if self.use_cache:
-            # SAFETY VALVE: Prevent infinite growth for long runs
-            if len(self.cache) > self.cache_limit:
-                if self.debug:
-                    print("Cache limit reached. Flushing.")
-                self.cache = {}
-
             # 1) Sift sequences into seen and unseen, keeping track of their location
             # so we can preserve order.
-            # 2) Pull from the has the fitness of the seen sequences.
+            # 2) Pull from the cache of the fitness of the seen sequences.
             seen_fitness, unseen_seq, unseen_hash = [], [], []
             for i, seq in enumerate(m_input):
                 k = xxhash.xxh64(seq).intdigest()
                 if k in self.cache:
+                    self.cache.move_to_end(k)  # mark as recently used
                     seen_fitness.append((i, self.cache[k]))
                 else:
                     unseen_seq.append((i, seq))
@@ -126,12 +124,17 @@ class ModelWrapper:
             # so we use the fastest we can.
             with self.torch_opt_fn():
                 results = self.model(m_input)
+            self.n_forward += len(m_input)
 
         if self.use_cache:
-            # 3) Add the unseen sequences to the cache.
+            # 3) Add the unseen sequences to the cache with LRU eviction.
             # 4) Interleave seen and unseen results to preserve order.
             for k, v in zip(unseen_hash, results):
                 self.cache[k] = v
+                if len(self.cache) > self.cache_limit:
+                    evicted_key, _ = self.cache.popitem(last=False)
+                    if self.debug:
+                        print(f"Cache limit reached. Evicting oldest entry ({evicted_key}).")
             unseen_fitness = [(i, r) for (i, _), r in zip(unseen_seq, results)]
             results = [x[1] for x in sorted(seen_fitness + unseen_fitness)]
 
@@ -154,6 +157,8 @@ class ModelWrapper:
         if self.tism_cost < 1.0:
             raise ValueError("Cost must be >= 1.0.")
         self.cost += self.tism_cost
+        self.n_forward += 1
+        self.n_backward += 1
 
         # Use fast tensor-based TISM
         pos_and_chars_to_mutate, logits = self.model.get_tism(sequence, idxs)

@@ -38,10 +38,10 @@ class RolloutNodeWithProbs(ada_utils.RolloutNode):
     def sort_key(self) -> tuple:
         """Total ordering for deterministic, hash-seed-independent sorting.
 
-        Includes all scalar state first, then a byte serialization of probs as a
-        final fallback so the order is total even when every scalar ties.  The
-        bytes comparison is reached only when fitness/seq/etc. are already equal,
-        so it never triggers NumPy's ambiguous-array-comparison error.
+        Uses scalar fields only. `seq` already distinguishes distinct candidates;
+        `id(self)` is a cheap fallback for the pathological case where every
+        scalar ties, avoiding the NumPy ambiguous-array-comparison error that
+        probs.tobytes() was meant to prevent.
         """
         return (
             self.fitness,
@@ -49,7 +49,7 @@ class RolloutNodeWithProbs(ada_utils.RolloutNode):
             self.edits_since_root,
             self.mutations_per_sequence,
             self.exploration_alpha,
-            self.probs.tobytes() if self.probs is not None else b"",
+            id(self),
         )
 
 
@@ -88,6 +88,11 @@ class GradaBeam:
         assert min(self.positions_to_mutate) >= 0
         assert max(self.positions_to_mutate) < len(start_sequence)
         assert mutations_per_sequence > 0
+        assert mutations_per_sequence <= len(self.positions_to_mutate), (
+            f"mutations_per_sequence ({mutations_per_sequence}) must be <= "
+            f"len(positions_to_mutate) ({len(self.positions_to_mutate)}); "
+            "otherwise binom.pmf receives p > 1."
+        )
         assert beam_size > 0
         assert n_rollouts_per_root > 0
         assert exploration_alpha >= 0 and exploration_alpha <= 1
@@ -160,25 +165,39 @@ class GradaBeam:
         rounded_rate = round(mutations_per_sequence, 4)
         return self._get_sampler_cached(rounded_rate)
 
-    @lru_cache(maxsize=None)
+    @lru_cache(maxsize=256)
     def _get_sampler_cached(
         self, mutations_per_sequence: float
     ) -> ada_utils.NumberEditsSampler:
         mu = mutations_per_sequence / len(self.positions_to_mutate)
+        # Derive an independent seed per rate so PBT samplers are uncorrelated.
+        rate_int = int(round(mutations_per_sequence * 10000))
+        child_seed = int(
+            np.random.SeedSequence([self.rng_seed, rate_int]).generate_state(1)[0]
+        )
         return ada_utils.NumberEditsSamplerAdaBeam(
             sequence_len=len(self.positions_to_mutate),
             mutation_rate=mu,
-            rng_seed=self.rng_seed,
+            rng_seed=child_seed,
         )
 
     def _get_next_mutation_params(self, node: RolloutNode) -> tuple[int, float]:
-        """Calculates n_edits, new mutation rate, and target alpha for the child node."""
+        """Sample the next (n_edits, new_rate) pair for a child of `node`.
+
+        Returns:
+            n_edits: number of positions to mutate this step.
+            new_rate: mutations_per_sequence to carry forward onto the child node.
+
+        Note: exploration_alpha for the child is computed separately in
+        mutate_nodes_gradabeam, not here.
+        """
         current_rate = node.mutations_per_sequence
 
         if self.use_pbt:
-            # Direct snap mode: sample edits using current rate, then snap rate to observation
+            # Direct snap mode: sample edits using current rate, then snap rate to observation.
+            # Clamp so mu = rate / L stays in (0, 1] and binom.pmf never receives p > 1.
             n_edits = int(self.get_sampler(current_rate).sample(1)[0])
-            new_rate = float(max(1.0, n_edits))
+            new_rate = float(np.clip(n_edits, 1.0, len(self.positions_to_mutate)))
 
             return n_edits, new_rate
         else:
@@ -227,7 +246,7 @@ class GradaBeam:
     def propose_sequences(self, root_nodes: list[RolloutNode]) -> list[RolloutNode]:
         """Propose top `beam_size` sequences for evaluation."""
         nodes_visited: set[RolloutNodeWithProbs] = set()
-        rollout_lengths: list[int] = []
+        all_rollout_lengths: list[int] = []
         gradient_node_cache: dict[str, RolloutNodeWithProbs] = {}
 
         root_nodes_effective = root_nodes * self.n_rollouts_per_root
@@ -246,9 +265,14 @@ class GradaBeam:
                 parent_nodes = self.initialize_roots_with_gradients(parent_nodes)
                 gradient_node_cache[parent_seq] = parent_nodes[0]
 
-            cur_nodes_visited, rollout_lengths = self.rollout(parent_nodes=parent_nodes)
+            cur_nodes_visited, cur_rollout_lengths = self.rollout(parent_nodes=parent_nodes)
             nodes_visited.update(cur_nodes_visited)
-            rollout_lengths.extend(rollout_lengths)
+            all_rollout_lengths.extend(cur_rollout_lengths)
+
+        # BIASED ESTIMATOR: last_rollout_lengths is right-censored — see the
+        # comment at rollout_lengths.append(...) in rollout(). Do not use as a
+        # reliable M estimate for Plans 02b/03 gating until censoring is fixed.
+        self.last_rollout_lengths = all_rollout_lengths
 
         if len(nodes_visited) == 0:
             raise ValueError("No nodes generated.")
@@ -309,6 +333,13 @@ class GradaBeam:
                 if child.fitness >= comparison_node.fitness:
                     new_nodes.append(child)
                 else:
+                    # RIGHT-CENSORED: only lineages that die by non-improvement are
+                    # recorded here. Lineages that keep improving until the while
+                    # condition fires (cur_rollout_length >= max_rollout_len) are
+                    # never appended, so last_rollout_lengths systematically omits
+                    # the longest, most productive lineages and underestimates
+                    # realized M. Correcting this censoring is deferred to Plans
+                    # 02b/03, which depend on an unbiased M estimate.
                     rollout_lengths.append(cur_rollout_length)
             parent_nodes = new_nodes
 
