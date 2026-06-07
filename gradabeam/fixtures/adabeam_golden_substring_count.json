@@ -1,0 +1,699 @@
+{
+  "oracle": "CountSubstringModel",
+  "rng_seed": 42,
+  "n_steps": 3,
+  "beam_size": 10,
+  "mutations_per_sequence": 1,
+  "n_rollouts_per_root": 4,
+  "start_sequence": "AAAAAA",
+  "initial_beam": [
+    {
+      "seq": "CAAACA",
+      "fitness": 6.0
+    },
+    {
+      "seq": "AAAAAA",
+      "fitness": 5.0
+    },
+    {
+      "seq": "AGATAA",
+      "fitness": 3.0
+    },
+    {
+      "seq": "AAATGA",
+      "fitness": 3.0
+    },
+    {
+      "seq": "TAAAAA",
+      "fitness": 4.0
+    },
+    {
+      "seq": "ACGAAT",
+      "fitness": 6.0
+    },
+    {
+      "seq": "AAACAA",
+      "fitness": 7.0
+    },
+    {
+      "seq": "AAATAA",
+      "fitness": 4.0
+    },
+    {
+      "seq": "AAAACA",
+      "fitness": 7.0
+    },
+    {
+      "seq": "AAAAAA",
+      "fitness": 5.0
+    }
+  ],
+  "steps": [
+    [
+      {
+        "seq": "ACCACA",
+        "fitness": 9.0
+      },
+      {
+        "seq": "AACACA",
+        "fitness": 9.0
+      },
+      {
+        "seq": "AGAAAC",
+        "fitness": 7.0
+      },
+      {
+        "seq": "ACCAAT",
+        "fitness": 7.0
+      },
+      {
+        "seq": "AACCAA",
+        "fitness": 7.0
+      },
+      {
+        "seq": "AAATAC",
+        "fitness": 7.0
+      },
+      {
+        "seq": "AAACAA",
+        "fitness": 7.0
+      },
+      {
+        "seq": "AAAACT",
+        "fitness": 7.0
+      },
+      {
+        "seq": "AAAACA",
+        "fitness": 7.0
+      },
+      {
+        "seq": "TAAACA",
+        "fitness": 6.0
+      },
+      {
+        "seq": "CGAACC",
+        "fitness": 6.0
+      },
+      {
+        "seq": "AGGAAC",
+        "fitness": 6.0
+      },
+      {
+        "seq": "AGACAG",
+        "fitness": 6.0
+      },
+      {
+        "seq": "ACCATA",
+        "fitness": 6.0
+      },
+      {
+        "seq": "ACATAT",
+        "fitness": 6.0
+      },
+      {
+        "seq": "AAGACT",
+        "fitness": 6.0
+      },
+      {
+        "seq": "AACAGA",
+        "fitness": 6.0
+      },
+      {
+        "seq": "CGAACA",
+        "fitness": 5.0
+      },
+      {
+        "seq": "ACGTAA",
+        "fitness": 5.0
+      },
+      {
+        "seq": "AACTGA",
+        "fitness": 5.0
+      },
+      {
+        "seq": "AACGGA",
+        "fitness": 5.0
+      },
+      {
+        "seq": "AAATCC",
+        "fitness": 5.0
+      },
+      {
+        "seq": "AAAAAA",
+        "fitness": 5.0
+      },
+      {
+        "seq": "TAAAAA",
+        "fitness": 4.0
+      },
+      {
+        "seq": "CCCAAT",
+        "fitness": 4.0
+      },
+      {
+        "seq": "ATCCAA",
+        "fitness": 4.0
+      },
+      {
+        "seq": "ATATCC",
+        "fitness": 4.0
+      },
+      {
+        "seq": "ATAAAA",
+        "fitness": 4.0
+      },
+      {
+        "seq": "AAATCA",
+        "fitness": 4.0
+      },
+      {
+        "seq": "AAATAA",
+        "fitness": 4.0
+      },
+      {
+        "seq": "AAAGAA",
+        "fitness": 4.0
+      },
+      {
+        "seq": "AAAATA",
+        "fitness": 4.0
+      },
+      {
+        "seq": "AAAAGA",
+        "fitness": 4.0
+      },
+      {
+        "seq": "TGATCC",
+        "fitness": 3.0
+      },
+      {
+        "seq": "TGAAAT",
+        "fitness": 3.0
+      },
+      {
+        "seq": "TATAAA",
+        "fitness": 3.0
+      },
+      {
+        "seq": "TAGAAA",
+        "fitness": 3.0
+      },
+      {
+        "seq": "TAAGCA",
+        "fitness": 3.0
+      },
+      {
+        "seq": "GCGAAT",
+        "fitness": 3.0
+      },
+      {
+        "seq": "GAAGAA",
+        "fitness": 3.0
+      },
+      {
+        "seq": "CAGAAT",
+        "fitness": 3.0
+      },
+      {
+        "seq": "CAAATA",
+        "fitness": 3.0
+      },
+      {
+        "seq": "CAAAGA",
+        "fitness": 3.0
+      },
+      {
+        "seq": "AGCTAT",
+        "fitness": 3.0
+      },
+      {
+        "seq": "AGCTAA",
+        "fitness": 3.0
+      },
+      {
+        "seq": "AGATAA",
+        "fitness": 3.0
+      },
+      {
+        "seq": "AGAAGA",
+        "fitness": 3.0
+      },
+      {
+        "seq": "AATTCA",
+        "fitness": 3.0
+      },
+      {
+        "seq": "AAGCGT",
+        "fitness": 3.0
+      },
+      {
+        "seq": "TTATCA",
+        "fitness": 2.0
+      },
+      {
+        "seq": "ATATGA",
+        "fitness": 2.0
+      },
+      {
+        "seq": "AGGTAA",
+        "fitness": 2.0
+      },
+      {
+        "seq": "AGCTGT",
+        "fitness": 2.0
+      },
+      {
+        "seq": "AGATGA",
+        "fitness": 2.0
+      },
+      {
+        "seq": "AAGTGA",
+        "fitness": 2.0
+      },
+      {
+        "seq": "TGGTAA",
+        "fitness": 1.0
+      }
+    ],
+    [
+      {
+        "seq": "AGACAC",
+        "fitness": 9.0
+      },
+      {
+        "seq": "ACCACA",
+        "fitness": 9.0
+      },
+      {
+        "seq": "ACACAA",
+        "fitness": 9.0
+      },
+      {
+        "seq": "ACAACT",
+        "fitness": 9.0
+      },
+      {
+        "seq": "ACAACA",
+        "fitness": 9.0
+      },
+      {
+        "seq": "AACTAC",
+        "fitness": 9.0
+      },
+      {
+        "seq": "AACACT",
+        "fitness": 9.0
+      },
+      {
+        "seq": "AACACA",
+        "fitness": 9.0
+      },
+      {
+        "seq": "GACACA",
+        "fitness": 8.0
+      },
+      {
+        "seq": "CACTAC",
+        "fitness": 8.0
+      },
+      {
+        "seq": "ACTACT",
+        "fitness": 8.0
+      },
+      {
+        "seq": "AAAAAC",
+        "fitness": 8.0
+      },
+      {
+        "seq": "ACCCAT",
+        "fitness": 7.0
+      },
+      {
+        "seq": "ACCCAA",
+        "fitness": 7.0
+      },
+      {
+        "seq": "AACCCA",
+        "fitness": 7.0
+      },
+      {
+        "seq": "AACCAA",
+        "fitness": 7.0
+      },
+      {
+        "seq": "AACAAT",
+        "fitness": 7.0
+      },
+      {
+        "seq": "AAACCA",
+        "fitness": 7.0
+      },
+      {
+        "seq": "AAACAG",
+        "fitness": 7.0
+      },
+      {
+        "seq": "AAACAA",
+        "fitness": 7.0
+      },
+      {
+        "seq": "AAAACT",
+        "fitness": 7.0
+      },
+      {
+        "seq": "TCACAA",
+        "fitness": 6.0
+      },
+      {
+        "seq": "TACCCT",
+        "fitness": 6.0
+      },
+      {
+        "seq": "TAACCT",
+        "fitness": 6.0
+      },
+      {
+        "seq": "TAAACT",
+        "fitness": 6.0
+      },
+      {
+        "seq": "TAAACA",
+        "fitness": 6.0
+      },
+      {
+        "seq": "GGAACC",
+        "fitness": 6.0
+      },
+      {
+        "seq": "GAAACT",
+        "fitness": 6.0
+      },
+      {
+        "seq": "GAAACA",
+        "fitness": 6.0
+      },
+      {
+        "seq": "CGAAAC",
+        "fitness": 6.0
+      },
+      {
+        "seq": "CAACAG",
+        "fitness": 6.0
+      },
+      {
+        "seq": "CAAACA",
+        "fitness": 6.0
+      },
+      {
+        "seq": "ATCACA",
+        "fitness": 6.0
+      },
+      {
+        "seq": "AGATAC",
+        "fitness": 6.0
+      },
+      {
+        "seq": "AGACAT",
+        "fitness": 6.0
+      },
+      {
+        "seq": "ACGCAT",
+        "fitness": 6.0
+      },
+      {
+        "seq": "ACCTCA",
+        "fitness": 6.0
+      },
+      {
+        "seq": "ACCGCA",
+        "fitness": 6.0
+      },
+      {
+        "seq": "ACATCT",
+        "fitness": 6.0
+      },
+      {
+        "seq": "AATACA",
+        "fitness": 6.0
+      },
+      {
+        "seq": "AACATT",
+        "fitness": 6.0
+      },
+      {
+        "seq": "AAACGG",
+        "fitness": 6.0
+      },
+      {
+        "seq": "TGAACA",
+        "fitness": 5.0
+      },
+      {
+        "seq": "TAGACA",
+        "fitness": 5.0
+      },
+      {
+        "seq": "GCTACT",
+        "fitness": 5.0
+      },
+      {
+        "seq": "AAAAAG",
+        "fitness": 5.0
+      },
+      {
+        "seq": "TAAAAT",
+        "fitness": 4.0
+      },
+      {
+        "seq": "TAAAAA",
+        "fitness": 4.0
+      },
+      {
+        "seq": "AGAAAT",
+        "fitness": 4.0
+      },
+      {
+        "seq": "AATAAA",
+        "fitness": 4.0
+      },
+      {
+        "seq": "AAATCA",
+        "fitness": 4.0
+      },
+      {
+        "seq": "AAAGCT",
+        "fitness": 4.0
+      },
+      {
+        "seq": "AAAGCA",
+        "fitness": 4.0
+      },
+      {
+        "seq": "TATCAA",
+        "fitness": 3.0
+      },
+      {
+        "seq": "TAGCCT",
+        "fitness": 3.0
+      },
+      {
+        "seq": "CCCAGA",
+        "fitness": 3.0
+      },
+      {
+        "seq": "ATCGAT",
+        "fitness": 3.0
+      },
+      {
+        "seq": "ATCCGA",
+        "fitness": 3.0
+      },
+      {
+        "seq": "AGCGCA",
+        "fitness": 3.0
+      },
+      {
+        "seq": "AATTAT",
+        "fitness": 3.0
+      }
+    ],
+    [
+      {
+        "seq": "ACACAC",
+        "fitness": 12.0
+      },
+      {
+        "seq": "CACAAC",
+        "fitness": 9.0
+      },
+      {
+        "seq": "ATACAC",
+        "fitness": 9.0
+      },
+      {
+        "seq": "ACCTAC",
+        "fitness": 9.0
+      },
+      {
+        "seq": "ACCACA",
+        "fitness": 9.0
+      },
+      {
+        "seq": "ACACAA",
+        "fitness": 9.0
+      },
+      {
+        "seq": "ACAACT",
+        "fitness": 9.0
+      },
+      {
+        "seq": "AACTAC",
+        "fitness": 9.0
+      },
+      {
+        "seq": "AACGAC",
+        "fitness": 9.0
+      },
+      {
+        "seq": "AACACT",
+        "fitness": 9.0
+      },
+      {
+        "seq": "TACACT",
+        "fitness": 8.0
+      },
+      {
+        "seq": "CACACT",
+        "fitness": 8.0
+      },
+      {
+        "seq": "CACACA",
+        "fitness": 8.0
+      },
+      {
+        "seq": "ACTACA",
+        "fitness": 8.0
+      },
+      {
+        "seq": "ACGACT",
+        "fitness": 8.0
+      },
+      {
+        "seq": "ACAAAA",
+        "fitness": 7.0
+      },
+      {
+        "seq": "AACCCT",
+        "fitness": 7.0
+      },
+      {
+        "seq": "AAAACG",
+        "fitness": 7.0
+      },
+      {
+        "seq": "GCAACA",
+        "fitness": 6.0
+      },
+      {
+        "seq": "CCCACA",
+        "fitness": 6.0
+      },
+      {
+        "seq": "CCACAA",
+        "fitness": 6.0
+      },
+      {
+        "seq": "CACAAA",
+        "fitness": 6.0
+      },
+      {
+        "seq": "ATCACA",
+        "fitness": 6.0
+      },
+      {
+        "seq": "AGCTAC",
+        "fitness": 6.0
+      },
+      {
+        "seq": "AGCGAC",
+        "fitness": 6.0
+      },
+      {
+        "seq": "AGAGAC",
+        "fitness": 6.0
+      },
+      {
+        "seq": "AGACTC",
+        "fitness": 6.0
+      },
+      {
+        "seq": "AGAACA",
+        "fitness": 6.0
+      },
+      {
+        "seq": "ACCTTC",
+        "fitness": 6.0
+      },
+      {
+        "seq": "ACCTCG",
+        "fitness": 6.0
+      },
+      {
+        "seq": "ACCTCA",
+        "fitness": 6.0
+      },
+      {
+        "seq": "ACAGAA",
+        "fitness": 6.0
+      },
+      {
+        "seq": "ACAAGT",
+        "fitness": 6.0
+      },
+      {
+        "seq": "AACTAG",
+        "fitness": 6.0
+      },
+      {
+        "seq": "GACTCA",
+        "fitness": 5.0
+      },
+      {
+        "seq": "GACAGA",
+        "fitness": 5.0
+      },
+      {
+        "seq": "CATTAC",
+        "fitness": 5.0
+      },
+      {
+        "seq": "CACTTC",
+        "fitness": 5.0
+      },
+      {
+        "seq": "CACGCA",
+        "fitness": 5.0
+      },
+      {
+        "seq": "AACTTT",
+        "fitness": 5.0
+      },
+      {
+        "seq": "ATAAAT",
+        "fitness": 4.0
+      },
+      {
+        "seq": "TGAAGT",
+        "fitness": 2.0
+      },
+      {
+        "seq": "TATATT",
+        "fitness": 2.0
+      },
+      {
+        "seq": "GTGAGT",
+        "fitness": 1.0
+      }
+    ]
+  ]
+}
