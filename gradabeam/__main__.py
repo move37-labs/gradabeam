@@ -49,8 +49,8 @@ import inspect
 import time
 
 from gradabeam import argparse_lib
-from gradabeam.gradabeam_optimizer import GradaBeam
-from gradabeam.adabeam_optimizer import AdaBeam
+from gradabeam.gradabeam_designer import GradaBeam
+from gradabeam.adabeam_designer import AdaBeam
 
 
 _OPTIMIZERS = {
@@ -236,6 +236,19 @@ def _build_parser() -> argparse.ArgumentParser:
         metavar="BOOL",
         help="Skip sequences already evaluated during rollouts. [default: False]",
     )
+    ab.add_argument(
+        "--allow_silent_edits",
+        type=argparse_lib.str_to_bool,
+        default=None,
+        metavar="BOOL",
+        help=(
+            "When True, use the legacy reproduction operator "
+            "(generate_random_mutant_v2, ~25%% silent edits).  Required to "
+            "reproduce published paper numbers from pre-refactor AdaBeam.  "
+            "When False (default), use the corrected position-space operator "
+            "where every edit changes a base.  [default: False]"
+        ),
+    )
 
     return p
 
@@ -266,7 +279,13 @@ def main(argv=None):
     seq_display = (
         start_sequence if len(start_sequence) <= 60 else start_sequence[:57] + "..."
     )
-    print(f"Optimizer            : {args.optimizer}")
+    silent_flag = (
+        args.allow_silent_edits if args.allow_silent_edits is not None else False
+    )
+    operator_note = (
+        " (legacy/silent, paper-reproduction mode)" if silent_flag else " (corrected)"
+    )
+    print(f"Optimizer            : {args.optimizer}{operator_note if args.optimizer == 'adabeam' else ''}")
     print(f"Sequence ({len(start_sequence):,} bp)  : {seq_display}")
     print(f"Mutable positions    : {n_mutable}")
     print(f"Mutations/step       : {mutations_per_sequence:.2f}")
@@ -316,6 +335,9 @@ def main(argv=None):
             **shared_kwargs,
             skip_repeat_sequences=args.skip_repeat_sequences
             if args.skip_repeat_sequences is not None
+            else False,
+            allow_silent_edits=args.allow_silent_edits
+            if args.allow_silent_edits is not None
             else False,
         )
     else:

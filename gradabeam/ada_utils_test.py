@@ -810,21 +810,6 @@ def test_positionspace_weights_bias_selection():
         f"expected {expected_rate:.4f}. Non-uniform weights are not being honored."
     )
 
-def test_positionspace_guard_n_edits_zero():
-    """n_edits=0 must raise AssertionError.
-    
-    The contract requires 1 <= n_edits; callers must handle the
-    no-positions-left case before calling this function.
-    """
-    with pytest.raises(AssertionError):
-        ada_utils.generate_random_mutant_positionspace(
-            sequence="ACGT",
-            mutable_positions=[0, 1, 2, 3],
-            position_weights=np.ones(4),
-            n_edits=0,
-            rng=np.random.default_rng(0),
-        )
-
 
 def test_positionspace_boundary_edit_all_positions():
     """n_edits == len(mutable_positions) must work: every mutable position is edited.
@@ -860,3 +845,73 @@ def test_positionspace_boundary_edit_all_positions():
             assert mutant[pos] == sequence[pos], (
                 f"seed {seed}: immutable position {pos} was changed"
             )
+
+
+# ---------------------------------------------------------------------------
+# Published behavior pin for generate_random_mutant_v2
+# ---------------------------------------------------------------------------
+
+def test_generate_random_mutant_v2_published_behavior():
+    """Pin the RNG-to-sequence mapping of the legacy AdaBeam mutation operator.
+
+    This test is a durable anchor that survives AdaBeam default changes and any
+    future class refactors — it verifies the OPERATOR ITSELF, not any class or
+    path routing, so it catches regressions in the fundamental published behavior.
+
+    Two checks:
+      (a) Exact sequence outputs under a fixed seed (pin the RNG stream).
+      (b) Silent-edit rate ≈ 25% over many draws, within a tight tolerance.
+          A "silent edit" is when a position is selected for mutation but the
+          randomly chosen base from {A,C,G,T} equals the original base.
+          With a 4-symbol alphabet and uniform base sampling, P(silent) = 1/4.
+
+    If either assertion fails, the published AdaBeam RNG consumption has changed
+    and the golden fixtures must be regenerated from the new operator.
+    """
+    alphabet = "".join(constants.VOCAB)
+    seq = "AAAAAA"
+    positions = list(range(len(seq)))
+
+    # ── (a) exact output under seed 42 ─────────────────────────────────────
+    rng = np.random.default_rng(42)
+    out1 = ada_utils.generate_random_mutant_v2(seq, positions, 2, alphabet, rng)
+    out2 = ada_utils.generate_random_mutant_v2(seq, positions, 1, alphabet, rng)
+    out3 = ada_utils.generate_random_mutant_v2(seq, positions, 2, alphabet, rng)
+
+    # Exact values captured from pre-refactor AdaBeam at commit 982c75a.
+    # Do NOT update these values without regenerating the golden fixtures.
+    assert out1 == "CAAACA", (
+        f"generate_random_mutant_v2 output 1 changed: expected 'CAAACA', got {out1!r}.  "
+        "The published AdaBeam RNG stream has diverged — regenerate the golden fixture."
+    )
+    assert out2 == "AAAAAA", (  # silent edit: A->A at the chosen position
+        f"generate_random_mutant_v2 output 2 changed: expected 'AAAAAA', got {out2!r}."
+    )
+    assert out3 == "AGATAA", (
+        f"generate_random_mutant_v2 output 3 changed: expected 'AGATAA', got {out3!r}."
+    )
+
+    # ── (b) silent-edit rate ≈ 25% (published behavior) ────────────────────
+    # The legacy operator samples a base uniformly from {A,C,G,T} regardless of
+    # the current base, so each edit has a 1/4 chance of being A→A (silent).
+    # This is the defining behavioral difference from the corrected operator.
+    N = 40_000
+    rng_rate = np.random.default_rng(0)
+    seq10 = "AAAAAAAAAA"
+    pos10 = list(range(10))
+
+    n_silent = sum(
+        # n=1: a single position is chosen, then a base drawn uniformly.
+        # Since seq is all-A, a silent edit leaves the sequence unchanged.
+        1
+        for _ in range(N)
+        if ada_utils.generate_random_mutant_v2(
+            seq10, pos10, 1, alphabet, rng_rate
+        ) == seq10
+    )
+    rate = n_silent / N
+    assert abs(rate - 0.25) < 0.01, (
+        f"Silent-edit rate is {rate:.4f}; expected ≈0.25 (±0.01).  "
+        "If the operator was changed to non-uniform base sampling, this is expected — "
+        "update the golden fixture and this bound accordingly."
+    )

@@ -2,7 +2,7 @@
 
 To test:
 ```zsh
-pytest gradabeam/adabeam_optimizer_test.py
+pytest gradabeam/adabeam_designer_test.py
 ```
 """
 
@@ -10,7 +10,7 @@ import pytest
 import numpy as np
 import random
 
-from gradabeam.adabeam_optimizer import AdaBeam
+from gradabeam.adabeam_designer import AdaBeam
 from gradabeam import testing_utils
 
 

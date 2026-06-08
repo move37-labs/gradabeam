@@ -3,9 +3,26 @@
 Run from the repo root:
     python gradabeam/fixtures/generate_golden.py
 
-MUST be run BEFORE any changes to adabeam_optimizer.py or gradabeam_optimizer.py.
+IMPORTANT — when to re-run:
+  Do NOT re-run against post-refactor code.  The golden fixtures in this
+  directory were captured from pre-refactor AdaBeam at commit 982c75a
+  (committed before any Plan-01-1b refactor source existed).  Re-running
+  against refactored code risks overwriting the genuine pre-refactor fixture
+  with post-refactor behavior and silently invalidating the equivalence gate.
+
+  Only re-run if you are deliberately regenerating the baseline (e.g. after
+  the oracle or sampler changes), and document the new anchor commit.
+
+MUST be run BEFORE any changes to adabeam_designer.py or gradabeam_designer.py.
 The produced JSON files are static fixtures committed to the repo.  The equivalence
 test compares against them, never re-runs AdaBeam live.
+
+Golden fixture provenance
+-------------------------
+Fixtures committed at: pre-refactor commit 982c75a
+Oracle: CountLetterModel (count_letter), CountSubstringModel(substring="AC")
+rng_seed: 42, start_sequence: "AAAAAA", n_steps: 3, beam_size: 10
+AdaBeam config: allow_silent_edits=True (generate_random_mutant_v2, ~25% silent)
 """
 
 import json
@@ -18,7 +35,7 @@ import numpy as np
 _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, _REPO_ROOT)
 
-from gradabeam.adabeam_optimizer import AdaBeam  # noqa: E402
+from gradabeam.adabeam_designer import AdaBeam  # noqa: E402
 from gradabeam import testing_utils  # noqa: E402
 
 # Oracles directory
@@ -36,9 +53,19 @@ class _CapturingAdaBeam(AdaBeam):
     The inner rollout loop is a verbatim copy of AdaBeam.propose_sequences so
     that the RNG consumption is IDENTICAL to the original.  The only addition
     is the ``self.trajectory.append(...)`` call after building sorted_sequences.
+
+    This subclass must always be constructed with allow_silent_edits=True.
+    The guard below ensures re-runs cannot silently capture corrected-path data.
     """
 
     def __init__(self, *args, **kwargs):
+        # allow_silent_edits must be True or this is the wrong config for fixture generation.
+        assert kwargs.get("allow_silent_edits", False) is True, (
+            "_CapturingAdaBeam must be constructed with allow_silent_edits=True.  "
+            "The golden fixture was captured from the legacy silent operator; "
+            "using the corrected operator would overwrite the fixture with "
+            "different data and invalidate the equivalence gate."
+        )
         super().__init__(*args, **kwargs)
         self.trajectory: list[list[dict]] = []
 
@@ -88,12 +115,28 @@ class _CapturingAdaBeam(AdaBeam):
 # ---------------------------------------------------------------------------
 
 def _verify_identical_top_beam(oracle_name, model_fn, start_seq, n_steps, rng_seed):
-    """Assert that _CapturingAdaBeam top-beam equals plain AdaBeam top-beam."""
+    """Assert that _CapturingAdaBeam top-beam equals plain AdaBeam top-beam.
+
+    Both must be constructed with allow_silent_edits=True to match the
+    legacy operator used to generate the original fixtures.
+    """
     kwargs = AdaBeam.debug_init_args()
-    kwargs.update(model_fn=model_fn, start_sequence=start_seq, rng_seed=rng_seed)
+    kwargs.update(
+        model_fn=model_fn,
+        start_sequence=start_seq,
+        rng_seed=rng_seed,
+        allow_silent_edits=True,  # EXPLICIT: must match the fixture's legacy config
+    )
 
     plain = AdaBeam(**kwargs)
-    capturing = _CapturingAdaBeam(**{**kwargs})
+    assert plain.strategy.is_legacy(), (
+        "plain AdaBeam must be on the legacy path for fixture verification."
+    )
+
+    capturing = _CapturingAdaBeam(**kwargs)
+    assert capturing.strategy.is_legacy(), (
+        "_CapturingAdaBeam must be on the legacy path for fixture verification."
+    )
 
     for step in range(n_steps):
         plain.run(n_steps=1)
@@ -116,10 +159,32 @@ def _verify_identical_top_beam(oracle_name, model_fn, start_seq, n_steps, rng_se
 # ---------------------------------------------------------------------------
 
 def generate_fixture(oracle_name, model_fn, start_seq, n_steps=3, rng_seed=42):
+    """Generate a single golden fixture.
+
+    ALWAYS constructs AdaBeam with allow_silent_edits=True (legacy path) so the
+    fixture is anchored to the pre-refactor operator.  The guard below will
+    refuse to run on any non-silent configuration and therefore prevent a future
+    default-flip from silently overwriting the genuine baseline.
+    """
     kwargs = AdaBeam.debug_init_args()
-    kwargs.update(model_fn=model_fn, start_sequence=start_seq, rng_seed=rng_seed)
+    kwargs.update(
+        model_fn=model_fn,
+        start_sequence=start_seq,
+        rng_seed=rng_seed,
+        allow_silent_edits=True,  # EXPLICIT: legacy path required
+    )
 
     opt = _CapturingAdaBeam(**kwargs)
+
+    # Guard: refuse to run if the designer is not on the legacy path.
+    # This prevents a future re-run after a default change from silently
+    # capturing corrected-path data instead of the genuine legacy baseline.
+    assert opt.strategy.is_legacy(), (
+        "generate_fixture must run on the legacy/silent path "
+        "(allow_silent_edits=True).  The current designer is using the "
+        "corrected operator, which would produce different sequences and "
+        "overwrite the genuine pre-refactor fixture.  Pass allow_silent_edits=True."
+    )
 
     initial_beam = [
         {"seq": n.seq, "fitness": float(n.fitness)} for n in opt.current_nodes
