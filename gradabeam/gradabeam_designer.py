@@ -103,7 +103,7 @@ class GradaBeam(AdaptiveRolloutDesigner):
             "n_rollouts_per_root": 4,
             "eval_batch_size": 1,
             "rng_seed": 42,
-            "exploration_alpha": 0.05,
+            "exploration_alpha": 0.5,
             "use_pbt": True,
         }
 

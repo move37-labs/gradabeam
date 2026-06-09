@@ -73,7 +73,7 @@ class RolloutNodeWithProbs(ada_utils.RolloutNode):
         default=1.0, compare=False, hash=False
     )
     exploration_alpha: float = dataclasses.field(
-        default=0.05, compare=False, hash=False
+        default=0.5, compare=False, hash=False
     )
     # ── position-space fields ───────────────────────────────────────────────
     position_weights: np.ndarray | None = field(default=None, hash=False, compare=False)
@@ -325,7 +325,7 @@ class AdaptiveRolloutDesigner:
         use_gradients: bool,
         allow_silent_edits: bool,
         use_pbt: bool,
-        exploration_alpha: float = 0.05,
+        exploration_alpha: float = 0.5,
         gradient_prob_cap: float = 0.10,
         max_logit: float = 3.0,
         rng_seed: int = 0,
@@ -1150,5 +1150,5 @@ class AdaptiveRolloutDesigner:
             "use_gradients": True,
             "allow_silent_edits": False,
             "use_pbt": True,
-            "exploration_alpha": 0.05,
+            "exploration_alpha": 0.5,
         }

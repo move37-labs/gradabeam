@@ -493,7 +493,7 @@ def test_no_silent_edits_corrected_path():
         fitness=np.float32(0.0),
         edits_since_root=0,
         mutations_per_sequence=float(n_edits_target),
-        exploration_alpha=0.05,
+        exploration_alpha=0.5,
         position_weights=pw.copy(),
         gradient_position_weights=None,
     )
@@ -698,7 +698,7 @@ def test_rollout_length_convention():
             fitness=np.float32(1.0),  # high fitness → children (0.0) will be rejected
             edits_since_root=0,
             mutations_per_sequence=1.0,
-            exploration_alpha=0.05,
+            exploration_alpha=0.5,
             position_weights=np.ones(n, dtype=np.float64) / n,
             gradient_position_weights=None,
         )
