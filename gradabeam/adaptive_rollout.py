@@ -237,7 +237,7 @@ class GradientPositionStrategy:
             "propose_positions called with no available positions."
         )
 
-        masked_grad = grad_w_full * avail_mask.astype(np.float64)
+        masked_grad: np.ndarray = grad_w_full * avail_mask.astype(np.float64)
         grad_sum = masked_grad.sum()
         if grad_sum > 0:
             masked_grad = masked_grad / grad_sum
