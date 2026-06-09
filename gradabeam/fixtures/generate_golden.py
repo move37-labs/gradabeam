@@ -29,7 +29,6 @@ import json
 import os
 import sys
 
-import numpy as np
 
 # Make sure the repo root is on the path so we can import gradabeam and oracles.
 _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))

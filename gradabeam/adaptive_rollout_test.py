@@ -42,7 +42,7 @@ import sys
 import numpy as np
 import pytest
 
-from gradabeam import ada_utils, testing_utils
+from gradabeam import testing_utils
 from gradabeam.adaptive_rollout import (
     AdaptiveRolloutDesigner,
     GradientPositionStrategy,
@@ -239,7 +239,7 @@ def test_no_double_edit_per_rollout():
     """
     model = testing_utils.CountLetterModel()
     start_seq = "AAAA"   # L=4; exhaustion reachable within chain_depth=6
-    L = len(start_seq)
+    len(start_seq)
 
     designer = AdaptiveRolloutDesigner(
         model_fn=model,
@@ -399,7 +399,7 @@ def test_alpha_direction_sanity():
     p_unif_masked = 1.0 / n_avail_masked   # 1/3
 
     masked_grad_avail = grad_w[:3] / grad_w[:3].sum()
-    unif_avail = np.ones(3) / 3
+    np.ones(3) / 3
     p_final_masked_0 = (
         (1 - initial_alpha) * masked_grad_avail[0] + initial_alpha * p_unif_masked
     )
@@ -631,7 +631,7 @@ def test_rollout_length_convention():
     lengths1 = designer_ex1.last_rollout_lengths
     assert len(lengths1) > 0, "No rollout lengths recorded (scenario 1 exhaustion)."
     # With L_mutate=1: step 1 makes 1 edit, step 2 finds exhaustion → length = 1.
-    assert all(l == 1 for l in lengths1), (
+    assert all(length == 1 for length in lengths1), (
         f"Scenario 1 (L=1, always-accept): expected all lengths=1, got {lengths1}.\n"
         "Regression in exhaustion recording convention — check that exhaustion\n"
         "records cur_rollout_length BEFORE the (blocked) increment."
@@ -656,7 +656,7 @@ def test_rollout_length_convention():
     lengths2 = designer_ex2.last_rollout_lengths
     assert len(lengths2) > 0, "No lengths recorded (scenario 2)."
     L2 = 2
-    assert all(1 <= l <= L2 for l in lengths2), (
+    assert all(1 <= length <= L2 for length in lengths2), (
         f"Scenario 2 (L=2, all-accept): lengths must be in [1, {L2}], got {lengths2}."
     )
 
@@ -701,7 +701,7 @@ def test_rollout_length_convention():
     lengths3 = designer_rej.last_rollout_lengths
     assert len(lengths3) > 0, "No rejection lengths recorded (scenario 3)."
     # All chains: parent fitness=1.0, child fitness=0.0 → rejected after 1 oracle call.
-    assert all(l == 1 for l in lengths3), (
+    assert all(length == 1 for length in lengths3), (
         f"Scenario 3 (rejection after 1 step): expected all lengths=1, got {lengths3}.\n"
         "Regression in rejection recording convention — check that rejection\n"
         "records cur_rollout_length AFTER the increment (= 1 oracle call made)."
