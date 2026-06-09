@@ -285,7 +285,9 @@ def main(argv=None):
     operator_note = (
         " (legacy/silent, paper-reproduction mode)" if silent_flag else " (corrected)"
     )
-    print(f"Optimizer            : {args.optimizer}{operator_note if args.optimizer == 'adabeam' else ''}")
+    print(
+        f"Optimizer            : {args.optimizer}{operator_note if args.optimizer == 'adabeam' else ''}"
+    )
     print(f"Sequence ({len(start_sequence):,} bp)  : {seq_display}")
     print(f"Mutable positions    : {n_mutable}")
     print(f"Mutations/step       : {mutations_per_sequence:.2f}")

@@ -31,7 +31,9 @@ import sys
 
 
 # Make sure the repo root is on the path so we can import gradabeam and oracles.
-_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+_REPO_ROOT = os.path.dirname(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+)
 sys.path.insert(0, _REPO_ROOT)
 
 from gradabeam.adabeam_designer import AdaBeam  # noqa: E402
@@ -45,6 +47,7 @@ from substring_count import CountSubstringModel  # noqa: E402
 # ---------------------------------------------------------------------------
 # Capturing subclass — identical inner loop, captures ALL sorted proposals
 # ---------------------------------------------------------------------------
+
 
 class _CapturingAdaBeam(AdaBeam):
     """AdaBeam subclass that records every proposed sequence per step.
@@ -76,10 +79,7 @@ class _CapturingAdaBeam(AdaBeam):
             parent_nodes = cur_root_nodes
 
             cur_rollout_length = 0
-            while (
-                len(parent_nodes) > 0
-                and cur_rollout_length < self.max_rollout_len
-            ):
+            while len(parent_nodes) > 0 and cur_rollout_length < self.max_rollout_len:
                 num_edit_locs = self.num_mutations_sampler.sample(len(parent_nodes))
                 children = self.mutate_nodes(parent_nodes, num_edit_locs)
                 sequences.update(children)
@@ -113,6 +113,7 @@ class _CapturingAdaBeam(AdaBeam):
 # Verification helper — compare capturing subclass against plain AdaBeam
 # ---------------------------------------------------------------------------
 
+
 def _verify_identical_top_beam(oracle_name, model_fn, start_seq, n_steps, rng_seed):
     """Assert that _CapturingAdaBeam top-beam equals plain AdaBeam top-beam.
 
@@ -142,9 +143,7 @@ def _verify_identical_top_beam(oracle_name, model_fn, start_seq, n_steps, rng_se
         capturing.run(n_steps=1)
 
         plain_beam = sorted((n.seq, float(n.fitness)) for n in plain.current_nodes)
-        cap_beam = sorted(
-            (n.seq, float(n.fitness)) for n in capturing.current_nodes
-        )
+        cap_beam = sorted((n.seq, float(n.fitness)) for n in capturing.current_nodes)
         assert plain_beam == cap_beam, (
             f"{oracle_name} step {step}: top-beam mismatch!\n"
             f"  plain:     {plain_beam[:3]}\n"
@@ -156,6 +155,7 @@ def _verify_identical_top_beam(oracle_name, model_fn, start_seq, n_steps, rng_se
 # ---------------------------------------------------------------------------
 # Fixture generation
 # ---------------------------------------------------------------------------
+
 
 def generate_fixture(oracle_name, model_fn, start_seq, n_steps=3, rng_seed=42):
     """Generate a single golden fixture.
@@ -229,9 +229,6 @@ if __name__ == "__main__":
         with open(path, "w") as fh:
             json.dump(data, fh, indent=2)
         n_total = sum(len(s) for s in data["steps"])
-        print(
-            f"  {oracle_name}: {N_STEPS} steps, "
-            f"{n_total} total proposals → {path}"
-        )
+        print(f"  {oracle_name}: {N_STEPS} steps, {n_total} total proposals → {path}")
 
     print("\nDone.  Commit the JSON files before editing any source.")

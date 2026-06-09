@@ -19,8 +19,8 @@ class BestEver:
 
     def __init__(self, sort_key: Callable[[Any], Any], capacity: int):
         assert capacity >= 1
-        self._sort_key = sort_key          # node -> orderable key; the designer's own
-        self._capacity = capacity          # grows lazily to the largest n requested
+        self._sort_key = sort_key  # node -> orderable key; the designer's own
+        self._capacity = capacity  # grows lazily to the largest n requested
         self._by_seq: dict[str, Any] = {}  # sequence string -> node
 
     def update(self, nodes: list) -> None:
@@ -35,7 +35,9 @@ class BestEver:
 
     def best(self, n: int) -> list:
         """Return up to `n` nodes, highest fitness first."""
-        self._capacity = max(self._capacity, n)  # never prune below what's been requested
+        self._capacity = max(
+            self._capacity, n
+        )  # never prune below what's been requested
         nodes = sorted(self._by_seq.values(), key=self._sort_key, reverse=True)
         return nodes[: min(n, len(nodes))]
 

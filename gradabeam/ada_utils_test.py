@@ -179,6 +179,7 @@ def test_get_tisms_with_idxs():
 # Item 1 — Real get_tism ordering (breaks the circularity of hand-built tests)
 # ---------------------------------------------------------------------------
 
+
 def test_get_tism_real_action_ordering():
     """Verify the real get_tism emits actions in positions-major, VOCAB-order, reference-removed order.
 
@@ -223,10 +224,10 @@ def test_get_tism_real_action_ordering():
     #   pos 2: ref='G' → non-ref in VOCAB order = A, C, T
     #   pos 3: ref='T' → non-ref in VOCAB order = A, C, G
     expected_bases_per_position = {
-        0: ['C', 'G', 'T'],
-        1: ['A', 'G', 'T'],
-        2: ['A', 'C', 'T'],
-        3: ['A', 'C', 'G'],
+        0: ["C", "G", "T"],
+        1: ["A", "G", "T"],
+        2: ["A", "C", "T"],
+        3: ["A", "C", "G"],
     }
 
     for i in range(n_positions):
@@ -299,6 +300,7 @@ def test_positionspace_edit_count_invariant(n_edits, seed):
 # ---------------------------------------------------------------------------
 # Collision regression test
 # ---------------------------------------------------------------------------
+
 
 def _build_peaked_tism_inputs(sequence: str, hot_position: int, n_edits: int):
     """Build pos_and_chars + probs that concentrate mass on hot_position.
@@ -394,7 +396,9 @@ def test_choice_without_replacement_collision_formula():
     n_draws = 500_000
     rng = np.random.default_rng(2024)
 
-    results = np.array([rng.choice(3, size=2, replace=False, p=p) for _ in range(n_draws)])
+    results = np.array(
+        [rng.choice(3, size=2, replace=False, p=p) for _ in range(n_draws)]
+    )
     first = results[:, 0]
     second = results[:, 1]
 
@@ -410,7 +414,7 @@ def test_choice_without_replacement_collision_formula():
             formula = p[i] * p[j] / (1.0 - p[i])
             assert abs(empirical - formula) < atol, (
                 f"Ordered-pair formula mismatch for (first={i}, second={j}): "
-                f"empirical={empirical:.5f}, formula={formula:.5f}, diff={empirical-formula:.5f}. "
+                f"empirical={empirical:.5f}, formula={formula:.5f}, diff={empirical - formula:.5f}. "
                 "numpy does NOT use successive conditional draws — the analytic collision rate "
                 "in _analytical_collision_rate is WRONG. Replace it with the empirical estimate."
             )
@@ -493,6 +497,7 @@ def test_collision_regression():
 # ---------------------------------------------------------------------------
 # Marginalizer round-trip test
 # ---------------------------------------------------------------------------
+
 
 def test_tism_probs_to_position_weights_round_trip():
     """Flattening a known per-position map and marginalizing recovers the raw row sums.
@@ -580,6 +585,7 @@ def test_real_get_tism_through_marginalizer():
     # This does not assume any ordering — it accumulates by the actual position
     # field in each (position, char) tuple.
     from collections import defaultdict
+
     pos_to_prob_sum: dict[int, float] = defaultdict(float)
     for (pos, _), prob in zip(pos_and_chars, probs):
         pos_to_prob_sum[pos] += float(prob)
@@ -608,6 +614,7 @@ def test_real_get_tism_through_marginalizer():
 # ---------------------------------------------------------------------------
 # Base-choice distribution test
 # ---------------------------------------------------------------------------
+
 
 def test_positionspace_base_choice_distribution():
     """Over many seeds, all 3 non-reference bases appear; reference never does."""
@@ -644,6 +651,7 @@ def test_positionspace_base_choice_distribution():
 # (These are exercised in integration when masking renormalizes weights toward
 # zero within a rollout; pin them now while isolated.)
 # ---------------------------------------------------------------------------
+
 
 def test_positionspace_guard_n_edits_zero():
     """n_edits=0 must raise AssertionError (silent no-op is forbidden).
@@ -713,6 +721,7 @@ def test_positionspace_guard_allzero_weights():
 # Item 4 — Subset mutable_positions with index-alignment check
 # ---------------------------------------------------------------------------
 
+
 def test_positionspace_subset_mutable_positions():
     """Edits land only within a strict non-contiguous mutable subset.
 
@@ -770,6 +779,7 @@ def test_positionspace_subset_mutable_positions():
 # Item 5 — Statistical weight-bias test
 # ---------------------------------------------------------------------------
 
+
 def test_positionspace_weights_bias_selection():
     """Non-uniform weights bias position selection proportionally to their values.
 
@@ -813,7 +823,7 @@ def test_positionspace_weights_bias_selection():
 
 def test_positionspace_boundary_edit_all_positions():
     """n_edits == len(mutable_positions) must work: every mutable position is edited.
-    
+
     This is the masking endgame that 1b hits when intra-rollout position
     exhaustion drives n_edits up to the number of remaining positions.
     Every mutable position must appear in edited_positions, no position
@@ -850,6 +860,7 @@ def test_positionspace_boundary_edit_all_positions():
 # ---------------------------------------------------------------------------
 # Published behavior pin for generate_random_mutant_v2
 # ---------------------------------------------------------------------------
+
 
 def test_generate_random_mutant_v2_published_behavior():
     """Pin the RNG-to-sequence mapping of the legacy AdaBeam mutation operator.
@@ -905,9 +916,8 @@ def test_generate_random_mutant_v2_published_behavior():
         # Since seq is all-A, a silent edit leaves the sequence unchanged.
         1
         for _ in range(N)
-        if ada_utils.generate_random_mutant_v2(
-            seq10, pos10, 1, alphabet, rng_rate
-        ) == seq10
+        if ada_utils.generate_random_mutant_v2(seq10, pos10, 1, alphabet, rng_rate)
+        == seq10
     )
     rate = n_silent / N
     assert abs(rate - 0.25) < 0.01, (

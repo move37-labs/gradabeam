@@ -63,7 +63,9 @@ def _load_fixture(filename: str) -> dict:
         return json.load(fh)
 
 
-def _step_proposals(designer: AdaptiveRolloutDesigner, n_steps: int) -> list[list[dict]]:
+def _step_proposals(
+    designer: AdaptiveRolloutDesigner, n_steps: int
+) -> list[list[dict]]:
     """Run n_steps one at a time; collect last_all_proposals after each step."""
     trajectory = []
     for _ in range(n_steps):
@@ -89,6 +91,7 @@ def _make_legacy_designer(oracle_name: str, fixture: dict) -> AdaptiveRolloutDes
         if _oracles_dir not in sys.path:
             sys.path.insert(0, _oracles_dir)
         from substring_count import CountSubstringModel  # type: ignore
+
         model_fn = CountSubstringModel(substring="AC")
     else:
         raise ValueError(f"Unknown oracle: {oracle_name}")
@@ -123,10 +126,14 @@ def _make_legacy_designer(oracle_name: str, fixture: dict) -> AdaptiveRolloutDes
 # Gate test: bit-for-bit equivalence with the frozen golden baseline
 # ---------------------------------------------------------------------------
 
-@pytest.mark.parametrize("fixture_file,oracle_name", [
-    ("adabeam_golden_count_letter.json", "CountLetterModel"),
-    ("adabeam_golden_substring_count.json", "CountSubstringModel"),
-])
+
+@pytest.mark.parametrize(
+    "fixture_file,oracle_name",
+    [
+        ("adabeam_golden_count_letter.json", "CountLetterModel"),
+        ("adabeam_golden_substring_count.json", "CountSubstringModel"),
+    ],
+)
 def test_adabeam_equivalence(fixture_file, oracle_name):
     """AdaptiveRolloutDesigner (legacy config) must reproduce the frozen golden trajectory.
 
@@ -142,9 +149,7 @@ def test_adabeam_equivalence(fixture_file, oracle_name):
 
     # ── initial beam ────────────────────────────────────────────────────────
     initial_got = sorted((n.seq, float(n.fitness)) for n in designer.current_nodes)
-    initial_expected = sorted(
-        (d["seq"], d["fitness"]) for d in fixture["initial_beam"]
-    )
+    initial_expected = sorted((d["seq"], d["fitness"]) for d in fixture["initial_beam"])
     assert initial_got == initial_expected, (
         f"{oracle_name}: initial beam mismatch.\n"
         f"  expected first 3: {initial_expected[:3]}\n"
@@ -172,6 +177,7 @@ def test_adabeam_equivalence(fixture_file, oracle_name):
 # Mutation test: equivalence gate is NOT vacuous
 # ---------------------------------------------------------------------------
 
+
 def test_equivalence_gate_is_not_vacuous():
     """The golden fixture was captured from real AdaBeam, not the corrected operator.
 
@@ -197,7 +203,9 @@ def test_equivalence_gate_is_not_vacuous():
         n_rollouts_per_root=fixture["n_rollouts_per_root"],
         eval_batch_size=1,
         rng_seed=fixture["rng_seed"],
-        strategy=UniformPositionStrategy(allow_silent_edits=False),  # DIFFERENT operator
+        strategy=UniformPositionStrategy(
+            allow_silent_edits=False
+        ),  # DIFFERENT operator
         use_gradients=False,
         allow_silent_edits=False,
         use_pbt=False,
@@ -208,9 +216,7 @@ def test_equivalence_gate_is_not_vacuous():
     corrected_proposals = set(
         (d["seq"], d["fitness"]) for d in corrected_designer.last_all_proposals
     )
-    expected_step0 = set(
-        (d["seq"], d["fitness"]) for d in fixture["steps"][0]
-    )
+    expected_step0 = set((d["seq"], d["fitness"]) for d in fixture["steps"][0])
 
     assert corrected_proposals != expected_step0, (
         "Gate is VACUOUS: the corrected position-space operator produced the "
@@ -223,6 +229,7 @@ def test_equivalence_gate_is_not_vacuous():
 # ---------------------------------------------------------------------------
 # No-double-edit-per-rollout — exercises exhaustion
 # ---------------------------------------------------------------------------
+
 
 def test_no_double_edit_per_rollout():
     """Within one rollout chain, no position is ever edited twice.
@@ -238,7 +245,7 @@ def test_no_double_edit_per_rollout():
     changed.
     """
     model = testing_utils.CountLetterModel()
-    start_seq = "AAAA"   # L=4; exhaustion reachable within chain_depth=6
+    start_seq = "AAAA"  # L=4; exhaustion reachable within chain_depth=6
     len(start_seq)
 
     designer = AdaptiveRolloutDesigner(
@@ -257,7 +264,7 @@ def test_no_double_edit_per_rollout():
         max_rollout_len=20,  # longer than L so we'd hit exhaustion if not terminated
     )
 
-    chain_depth = 6   # > L=4; exhaustion must happen by depth 4
+    chain_depth = 6  # > L=4; exhaustion must happen by depth 4
     n_rollouts_to_check = 10
     rng = np.random.default_rng(0)
 
@@ -283,13 +290,9 @@ def test_no_double_edit_per_rollout():
             )
             child = children[0]
 
-            prev_avail = {
-                i for i, w in enumerate(current.position_weights) if w > 0
-            }
+            prev_avail = {i for i, w in enumerate(current.position_weights) if w > 0}
             assert child.position_weights is not None
-            child_avail = {
-                i for i, w in enumerate(child.position_weights) if w > 0
-            }
+            child_avail = {i for i, w in enumerate(child.position_weights) if w > 0}
             newly_edited = prev_avail - child_avail
 
             double_edits = newly_edited & edited_positions
@@ -312,6 +315,7 @@ def test_no_double_edit_per_rollout():
 # ---------------------------------------------------------------------------
 # α direction sanity
 # ---------------------------------------------------------------------------
+
 
 def test_alpha_direction_sanity():
     """α decreases when a high-gradient position is chosen; increases when low.
@@ -353,7 +357,7 @@ def test_alpha_direction_sanity():
     )
 
     n_avail = n_positions
-    p_uniform = 1.0 / n_avail    # must be 1/6, not 1/(3*6)=1/18
+    p_uniform = 1.0 / n_avail  # must be 1/6, not 1/(3*6)=1/18
 
     # ── case A: HIGH-gradient position chosen ───────────────────────────────
     p_final_high = (1 - initial_alpha) * grad_w[0] + initial_alpha * p_uniform
@@ -396,13 +400,13 @@ def test_alpha_direction_sanity():
     )
 
     n_avail_masked = 3
-    p_unif_masked = 1.0 / n_avail_masked   # 1/3
+    p_unif_masked = 1.0 / n_avail_masked  # 1/3
 
     masked_grad_avail = grad_w[:3] / grad_w[:3].sum()
     np.ones(3) / 3
-    p_final_masked_0 = (
-        (1 - initial_alpha) * masked_grad_avail[0] + initial_alpha * p_unif_masked
-    )
+    p_final_masked_0 = (1 - initial_alpha) * masked_grad_avail[
+        0
+    ] + initial_alpha * p_unif_masked
 
     child_alpha_masked = designer._compute_child_alpha(
         node=node_masked,
@@ -437,6 +441,7 @@ def test_alpha_direction_sanity():
 # allow_silent_edits=False: no silent edits, routes through corrected path
 # ---------------------------------------------------------------------------
 
+
 def test_no_silent_edits_corrected_path():
     """The corrected gradient-free path never produces silent edits.
 
@@ -465,7 +470,7 @@ def test_no_silent_edits_corrected_path():
         eval_batch_size=1,
         rng_seed=77,
         strategy=UniformPositionStrategy(allow_silent_edits=False),
-        use_gradients=False,   # gradient-free, NOT the gradient path
+        use_gradients=False,  # gradient-free, NOT the gradient path
         allow_silent_edits=False,
         use_pbt=False,
         max_rollout_len=1,
@@ -539,6 +544,7 @@ def test_no_silent_edits_corrected_path():
 # Bug 2: NaN seed fitness must not propagate to the initial beam
 # ---------------------------------------------------------------------------
 
+
 def test_positionspace_init_beam_has_no_nan_fitness():
     """After _init_beam_positionspace, all current_nodes must have real fitnesses.
 
@@ -579,6 +585,7 @@ def test_positionspace_init_beam_has_no_nan_fitness():
 # Bug 3: rollout-length convention — hand-traced toy scenarios
 # ---------------------------------------------------------------------------
 
+
 def test_rollout_length_convention():
     """Verify the rollout-length recording convention with hand-traced scenarios.
 
@@ -608,6 +615,7 @@ def test_rollout_length_convention():
       that always returns 0.0 (< parent fitness 1.0) → the returned children are
       rejected when passed back through the loop.  Verify the convention holds.
     """
+
     # ── Scenario 1: deterministic exhaustion at length 1 ────────────────────
     def _always_accept(seqs):
         return np.ones(len(seqs), dtype=float)
@@ -625,7 +633,7 @@ def test_rollout_length_convention():
         allow_silent_edits=False,
         use_pbt=False,
         max_rollout_len=5,
-        positions_to_mutate=[0],   # L_mutate=1 → exactly 1 edit consumed per rollout
+        positions_to_mutate=[0],  # L_mutate=1 → exactly 1 edit consumed per rollout
     )
     designer_ex1.run(n_steps=1)
     lengths1 = designer_ex1.last_rollout_lengths
@@ -687,14 +695,14 @@ def test_rollout_length_convention():
     fake_roots = [
         RolloutNodeWithProbs(
             seq=node.seq,
-            fitness=np.float32(1.0),    # high fitness → children (0.0) will be rejected
+            fitness=np.float32(1.0),  # high fitness → children (0.0) will be rejected
             edits_since_root=0,
             mutations_per_sequence=1.0,
             exploration_alpha=0.05,
             position_weights=np.ones(n, dtype=np.float64) / n,
             gradient_position_weights=None,
         )
-        for node in designer_rej.current_nodes[:2]   # 2 roots
+        for node in designer_rej.current_nodes[:2]  # 2 roots
     ]
     designer_rej.current_nodes = fake_roots
     designer_rej.run(n_steps=1)
@@ -731,7 +739,7 @@ def test_alpha_unchanged_on_gradient_free_path():
         strategy=UniformPositionStrategy(allow_silent_edits=False),
         use_gradients=False,
         allow_silent_edits=False,
-        use_pbt=True,     # PBT enabled, but gradient-free → α must stay constant
+        use_pbt=True,  # PBT enabled, but gradient-free → α must stay constant
         exploration_alpha=initial_alpha,
     )
 

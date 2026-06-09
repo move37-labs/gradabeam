@@ -34,6 +34,7 @@ PositionsAndCharactersType = ada_utils.PositionsAndCharactersType
 # Extended rollout-node type
 # ---------------------------------------------------------------------------
 
+
 @dataclasses.dataclass(frozen=True)
 class RolloutNodeWithProbs(ada_utils.RolloutNode):
     """Rollout node that carries gradient + position-space state.
@@ -75,9 +76,7 @@ class RolloutNodeWithProbs(ada_utils.RolloutNode):
         default=0.05, compare=False, hash=False
     )
     # ── position-space fields ───────────────────────────────────────────────
-    position_weights: np.ndarray | None = field(
-        default=None, hash=False, compare=False
-    )
+    position_weights: np.ndarray | None = field(default=None, hash=False, compare=False)
     gradient_position_weights: np.ndarray | None = field(
         default=None, hash=False, compare=False
     )
@@ -98,6 +97,7 @@ class RolloutNodeWithProbs(ada_utils.RolloutNode):
 # ---------------------------------------------------------------------------
 # Strategy objects
 # ---------------------------------------------------------------------------
+
 
 class UniformPositionStrategy:
     """Uniform position weights.
@@ -146,7 +146,11 @@ class UniformPositionStrategy:
         )
         n = len(mutable_positions)
 
-        pw = node.position_weights.copy() if node.position_weights is not None else np.ones(n, dtype=np.float64)
+        pw = (
+            node.position_weights.copy()
+            if node.position_weights is not None
+            else np.ones(n, dtype=np.float64)
+        )
         avail_mask = pw > 0
         n_available = int(avail_mask.sum())
         avail_positions = [p for p, m in zip(mutable_positions, avail_mask) if m]
@@ -233,9 +237,7 @@ class GradientPositionStrategy:
         avail_positions = [p for p, m in zip(mutable_positions, avail_mask) if m]
 
         effective_n = min(n_edits, n_available)
-        assert effective_n >= 1, (
-            "propose_positions called with no available positions."
-        )
+        assert effective_n >= 1, "propose_positions called with no available positions."
 
         masked_grad: np.ndarray = grad_w_full * avail_mask.astype(np.float64)
         grad_sum = masked_grad.sum()
@@ -278,6 +280,7 @@ class GradientPositionStrategy:
 # ---------------------------------------------------------------------------
 # AdaptiveRolloutDesigner — unified optimizer
 # ---------------------------------------------------------------------------
+
 
 class AdaptiveRolloutDesigner:
     """Unified beam-search sequence designer.
@@ -361,9 +364,7 @@ class AdaptiveRolloutDesigner:
                 "and does not use TISM."
             )
         if isinstance(strategy, GradientPositionStrategy) and not use_gradients:
-            raise ValueError(
-                "GradientPositionStrategy requires use_gradients=True."
-            )
+            raise ValueError("GradientPositionStrategy requires use_gradients=True.")
 
         self.strategy = strategy
         self.use_gradients = use_gradients
@@ -527,7 +528,9 @@ class AdaptiveRolloutDesigner:
         init_pw = np.ones(n, dtype=np.float64) / n
         seed_node = RolloutNodeWithProbs(
             seq=start_sequence,
-            fitness=np.float32(np.nan),   # safe: NaN is never read after children are made
+            fitness=np.float32(
+                np.nan
+            ),  # safe: NaN is never read after children are made
             edits_since_root=0,
             mutations_per_sequence=float(mutations_per_sequence),
             exploration_alpha=float(self.exploration_alpha),
@@ -604,10 +607,7 @@ class AdaptiveRolloutDesigner:
             parent_nodes = cur_root_nodes
             cur_rollout_length = 0
 
-            while (
-                len(parent_nodes) > 0
-                and cur_rollout_length < self.max_rollout_len
-            ):
+            while len(parent_nodes) > 0 and cur_rollout_length < self.max_rollout_len:
                 num_edit_locs = self.num_mutations_sampler.sample(len(parent_nodes))
                 children = self._mutate_legacy_nodes(parent_nodes, num_edit_locs)
                 sequences.update(children)
@@ -704,21 +704,15 @@ class AdaptiveRolloutDesigner:
             ]
 
             cur_rollout_length = 0
-            while (
-                len(parent_nodes) > 0
-                and cur_rollout_length < self.max_rollout_len
-            ):
+            while len(parent_nodes) > 0 and cur_rollout_length < self.max_rollout_len:
                 # Exhaustion check BEFORE generating; cur_rollout_length = mutations made.
                 parent_nodes, exhausted = self._filter_exhausted(parent_nodes)
-                all_rollout_lengths.extend(
-                    [cur_rollout_length] * len(exhausted)
-                )
+                all_rollout_lengths.extend([cur_rollout_length] * len(exhausted))
                 if not parent_nodes:
                     break
 
                 num_edit_locs = [
-                    int(x)
-                    for x in self.num_mutations_sampler.sample(len(parent_nodes))
+                    int(x) for x in self.num_mutations_sampler.sample(len(parent_nodes))
                 ]
                 children = self._mutate_gradient_nodes(
                     parent_nodes,
@@ -742,17 +736,13 @@ class AdaptiveRolloutDesigner:
         if not nodes_visited:
             raise ValueError("No nodes generated.")
 
-        sorted_nodes = sorted(
-            nodes_visited, key=lambda x: x.sort_key, reverse=True
-        )
+        sorted_nodes = sorted(nodes_visited, key=lambda x: x.sort_key, reverse=True)
         self.last_all_proposals = [
             {"seq": n.seq, "fitness": float(n.fitness)} for n in sorted_nodes
         ]
         return sorted_nodes[: self.beam_size]
 
-    def _attach_uniform_position_weights(
-        self, node: Any
-    ) -> RolloutNodeWithProbs:
+    def _attach_uniform_position_weights(self, node: Any) -> RolloutNodeWithProbs:
         """Return a RolloutNodeWithProbs with fresh uniform position weights.
 
         Used to initialize each rollout in the corrected gradient-free path.
@@ -803,9 +793,7 @@ class AdaptiveRolloutDesigner:
         if not nodes_visited:
             raise ValueError("No nodes generated.")
 
-        sorted_nodes = sorted(
-            nodes_visited, key=lambda x: x.sort_key, reverse=True
-        )
+        sorted_nodes = sorted(nodes_visited, key=lambda x: x.sort_key, reverse=True)
         self.last_all_proposals = [
             {"seq": n.seq, "fitness": float(n.fitness)} for n in sorted_nodes
         ]
@@ -835,10 +823,7 @@ class AdaptiveRolloutDesigner:
         rollout_lengths: list[int] = []
         cur_rollout_length = 0
 
-        while (
-            len(parent_nodes) > 0
-            and cur_rollout_length < self.max_rollout_len
-        ):
+        while len(parent_nodes) > 0 and cur_rollout_length < self.max_rollout_len:
             # Exhaustion check BEFORE generating.
             # cur_rollout_length here = mutations already made = correct length.
             parent_nodes, exhausted = self._filter_exhausted(parent_nodes)
@@ -907,7 +892,9 @@ class AdaptiveRolloutDesigner:
         num_edit_locs: list[int],
         new_rates: list[float],
     ) -> list[RolloutNodeWithProbs]:
-        assert len(nodes) == len(num_edit_locs) == len(new_rates) <= self.eval_batch_size
+        assert (
+            len(nodes) == len(num_edit_locs) == len(new_rates) <= self.eval_batch_size
+        )
 
         seqs: list[str] = []
         new_pw_list: list[np.ndarray] = []
@@ -1059,7 +1046,7 @@ class AdaptiveRolloutDesigner:
                 debug=self.debug,
             )
             assert len(pos_and_chars) == 3 * n_positions, (
-                f"Expected 3×{n_positions}={3*n_positions} actions, "
+                f"Expected 3×{n_positions}={3 * n_positions} actions, "
                 f"got {len(pos_and_chars)}."
             )
             assert len(pos_and_chars) == len(logits)
@@ -1101,7 +1088,9 @@ class AdaptiveRolloutDesigner:
         scaled = scaled / dyn_temp
 
         gradient_action_probs = softmax(scaled)
-        gradient_action_probs = np.minimum(gradient_action_probs, self.gradient_prob_cap)
+        gradient_action_probs = np.minimum(
+            gradient_action_probs, self.gradient_prob_cap
+        )
         gradient_action_probs /= gradient_action_probs.sum()
 
         pos_weights = ada_utils.tism_probs_to_position_weights(

@@ -135,7 +135,9 @@ class ModelWrapper:
                 if len(self.cache) > self.cache_limit:
                     evicted_key, _ = self.cache.popitem(last=False)
                     if self.debug:
-                        print(f"Cache limit reached. Evicting oldest entry ({evicted_key}).")
+                        print(
+                            f"Cache limit reached. Evicting oldest entry ({evicted_key})."
+                        )
             unseen_fitness = [(i, r) for (i, _), r in zip(unseen_seq, results)]
             results = [x[1] for x in sorted(seen_fitness + unseen_fitness)]
 
