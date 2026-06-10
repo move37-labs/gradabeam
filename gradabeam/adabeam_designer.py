@@ -14,14 +14,14 @@ import numpy as np
 
 from gradabeam import ada_utils
 from gradabeam import testing_utils
-from gradabeam.adaptive_rollout import AdaptiveRolloutDesigner, UniformPositionStrategy
+from gradabeam.adaptive_rollout import AdaptiveRolloutDesigner, UniformActionStrategy
 
 
 class AdaBeam(AdaptiveRolloutDesigner):
     """AdaBeam nucleic acid sequence designer.
 
-    Defaults to the corrected position-space path (allow_silent_edits=False):
-      strategy = UniformPositionStrategy(allow_silent_edits=False)
+    Defaults to the corrected action-space path (allow_silent_edits=False):
+      strategy = UniformActionStrategy(allow_silent_edits=False)
       use_gradients = False
       use_pbt = False
 
@@ -75,7 +75,7 @@ class AdaBeam(AdaptiveRolloutDesigner):
             positions_to_mutate=positions_to_mutate,
             max_rollout_len=max_rollout_len,
             debug=debug,
-            strategy=UniformPositionStrategy(allow_silent_edits=allow_silent_edits),
+            strategy=UniformActionStrategy(allow_silent_edits=allow_silent_edits),
             use_gradients=False,
             allow_silent_edits=allow_silent_edits,
             use_pbt=False,

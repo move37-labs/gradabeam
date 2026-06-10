@@ -4,13 +4,14 @@ Public constructor signature is unchanged; existing callers and the CLI
 continue to work without modification.
 
 Changes vs. the previous implementation (Plan 01 §3-4):
-  * Mutation is now in position space (generate_random_mutant_positionspace).
-  * Masking is in position space: after editing position j, zero it in the
-    L-vector and renormalize — "don't edit the same position twice per rollout"
-    now actually holds.
-  * α-posterior: p_uniform = 1/n_available_positions (not 1/3L);
+  * Mutation is now in action space with position-level TISM masking
+    (generate_random_mutant_actionspace).
+  * Masking is at the position level: after choosing action (pos, char),
+    all actions at 'pos' are masked — "don't edit the same position twice per rollout"
+    now actually holds without losing gradient base-direction.
+  * α-posterior: p_uniform = 1/n_available_actions;
     P_final recomputed explicitly at each step as the (1-α)·grad + α·unif
-    mixture over available positions.
+    mixture over available actions.
 """
 
 from typing import Any
@@ -18,7 +19,7 @@ from typing import Any
 from gradabeam import testing_utils
 from gradabeam.adaptive_rollout import (
     AdaptiveRolloutDesigner,
-    GradientPositionStrategy,
+    GradientActionStrategy,
 )
 
 
@@ -26,14 +27,14 @@ class GradaBeam(AdaptiveRolloutDesigner):
     """GradaBeam nucleic acid sequence designer with PBT.
 
     Delegates to AdaptiveRolloutDesigner with:
-      strategy = GradientPositionStrategy()
+      strategy = GradientActionStrategy()
       use_gradients = True
       allow_silent_edits = False
       use_pbt = <from constructor>
 
-    The gradient information is marginalized to position space via
-    tism_probs_to_position_weights, mixed with uniform exploration at weight α,
-    and used to sample N distinct positions for each rollout step.
+    The gradient information is used to sample actions in 3L space, mixed with
+    uniform exploration at weight α, and used to sample N distinct positions
+    for each rollout step.
     """
 
     def __init__(
@@ -84,7 +85,7 @@ class GradaBeam(AdaptiveRolloutDesigner):
             positions_to_mutate=positions_to_mutate,
             max_rollout_len=max_rollout_len,
             debug=debug,
-            strategy=GradientPositionStrategy(),
+            strategy=GradientActionStrategy(),
             use_gradients=True,
             allow_silent_edits=False,
             use_pbt=use_pbt,

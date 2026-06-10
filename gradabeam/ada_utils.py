@@ -305,154 +305,148 @@ def generate_random_mutant_v2(
     )
 
 
-def generate_random_mutant_tism(
+def build_uniform_pos_and_chars(sequence: str, positions_to_mutate: list[int]) -> list[tuple[int, str]]:
+    """Build a standard 3L actions list of (position, character) pairs.
+
+    For each position in positions_to_mutate, we generate 3 non-reference actions.
+    """
+    all_bases = constants.VOCAB
+    pos_and_chars = []
+    for pos in positions_to_mutate:
+        ref = sequence[pos]
+        alts = [b for b in all_bases if b != ref]
+        for alt in alts:
+            pos_and_chars.append((pos, alt))
+    return pos_and_chars
+
+
+def generate_random_mutant_actionspace(
     sequence: str,
     pos_and_chars_to_mutate: PositionsAndCharactersType,
-    random_n_loc: int,
-    rng: np.random.Generator,
-    probs: np.ndarray,
-    debug: bool = False,
-) -> tuple[str, list[int]]:
-    """
-    Generate a mutant of `sequence` with exactly `random_n_loc` edits, using `tism` info.
-
-    Args:
-        sequence: Sequence that will be mutated from.
-        pos_and_chars_to_mutate: (position, character) of the allowed positions to be mutated.
-        random_n_loc: Number of mutations per sequence.
-        alphabet: Alphabet string.
-        rng: Random number generator.
-        probs: XXX
-        debug: If True, print debug info.
-
-    Returns:
-        Mutant sequence string and indices within the mutable positions that were mutated.
-
-    """
-    assert isinstance(pos_and_chars_to_mutate, list)
-
-    # OPTIMIZATION: Use integer indices instead of tuples for faster rng.choice
-    # NumPy's rng.choice is much faster when working with integer arrays
-    n_actions = len(pos_and_chars_to_mutate)
-    indices = np.arange(n_actions, dtype=np.uint32)
-
-    selected_indices = rng.choice(indices, size=random_n_loc, replace=False, p=probs)
-    assert len(selected_indices) == random_n_loc
-
-    mutant, rel_pos_of_mutations = list(sequence), []
-    for i in selected_indices:
-        pos, char = pos_and_chars_to_mutate[i]
-        mutant[int(pos)] = str(char)
-        rel_pos_of_mutations.append(
-            i
-        )  # Use relative position, which is needed downstream.
-    return "".join(mutant), rel_pos_of_mutations
-
-
-def tism_probs_to_position_weights(
-    probs_3L: np.ndarray,
-    n_positions: int,
-) -> np.ndarray:
-    """Marginalize a 3L TISM action-value vector to a per-position weight vector.
-
-    Action-ordering assumption (verified in tism.TISMModelClass.get_tism):
-      Before the reference-base mask, the flat layout is positions-major with vocab
-      tiled: [(p0,A),(p0,C),(p0,G),(p0,T), (p1,A),...].  The mask removes exactly
-      one entry per position (the reference base), leaving the three non-reference
-      actions for position i in the contiguous slice [3i : 3i+3] of the masked
-      output.  Therefore reshape(-1, 3).sum(axis=1) correctly recovers the sum of
-      each position's three action entries.
-
-    Args:
-        probs_3L: 1-D array of length 3 * n_positions containing nonnegative
-            values.  No normalization is required or applied; the function returns
-            the raw per-position sums of each position's three action entries.
-            Pass a softmax-normalized vector to obtain P(position i is touched)
-            under the current distribution; pass raw logits or counts for other
-            uses.
-        n_positions: number of mutable positions (L).
-
-    Returns:
-        1-D array of length n_positions containing the sum of the three action
-        entries for each position.
-    """
-    assert len(probs_3L) == 3 * n_positions, (
-        f"Expected len(probs_3L) == 3 * n_positions = {3 * n_positions}, "
-        f"got {len(probs_3L)}."
-    )
-    return probs_3L.reshape(n_positions, 3).sum(axis=1)
-
-
-def generate_random_mutant_positionspace(
-    sequence: str,
-    mutable_positions: list[int],
-    position_weights: np.ndarray,
     n_edits: int,
     rng: np.random.Generator,
-) -> tuple[str, list[int]]:
-    """Generate a mutant with exactly n_edits distinct edits in position space.
+    probs: np.ndarray,
+) -> tuple[str, list[int], np.ndarray, list[float]]:
+    """Generate a mutant with exactly n_edits distinct position edits in action space.
 
-    Unlike generate_random_mutant_tism (which samples in the 3L action space and
-    can collide when two selected actions share a position), this function samples
-    n_edits distinct positions first, then picks the new base uniformly from the
-    3 non-reference bases.  This guarantees exactly n_edits distinct edits.
+    Uses the Plackett-Luce / marginal+conditional identity for O(3L) cost:
+
+      1. Marginalize 3L action probs to per-position weights w_i = Σ_a p_{i,a}.
+      2. Draw N distinct POSITIONS in one rng.choice(..., replace=False) call.
+      3. Draw the BASE at each chosen position from the conditional p_{i,a}/w_i
+         via vectorized inverse-CDF: (cumsum < u).sum(axis=1).
+
+    This is distribution-identical to sequential action-draw with full-position
+    masking, but avoids the per-edit Python loop, sum, normalize, and arange.
+
+    Cap policy: the per-action 0.10 cap is applied once at root-level
+    (in _logits_to_gradient_probs).  Across-step masking renormalizes survivors
+    upward but does NOT re-cap — the cap is root-level smoothing only, not a
+    maintained invariant.  This matches the prerefactor behavior on main.
 
     Args:
         sequence: Reference sequence to mutate.
-        mutable_positions: Absolute (0-based) positions that may be edited.
-        position_weights: Non-negative weight for each mutable position (same
-            length as mutable_positions).  Need not be normalized; normalized
-            internally.
-        n_edits: Number of distinct positions to edit.  Must satisfy
-            1 <= n_edits <= len(mutable_positions).  Callers must handle the
-            no-positions-left case (n_edits == 0) before calling; this function
-            never silently returns an unedited sequence.
-        rng: NumPy random Generator.
+        pos_and_chars_to_mutate: (position, character) pairs, positions-major,
+            3 per position (non-reference bases in VOCAB order).
+        n_edits: Intended number of distinct position edits.
+        rng: Random number generator.
+        probs: 1-D array of length 3L of current (mixed) action-probabilities.
+            Must be nonnegative; used for both sampling and p_final.
 
     Returns:
-        (mutant_string, edited_positions) where edited_positions is the list of
-        absolute (0-based) positions that were changed, in the order they were
-        selected.
+        (mutant_string, selected_action_indices, final_masked_probs, p_final_chosen_list)
     """
-    # Fix 4: convert to float64 array once; run all weight asserts on the array.
-    weights = np.asarray(position_weights, dtype=np.float64)
+    assert isinstance(pos_and_chars_to_mutate, list)
+    n_actions = len(pos_and_chars_to_mutate)
+    assert len(probs) == n_actions, f"Expected probs of length {n_actions}, got {len(probs)}"
+    assert n_actions % 3 == 0, "Action space size must be a multiple of 3."
+    assert n_edits >= 1, f"n_edits ({n_edits}) must be >= 1"
 
-    # Fix 2: enforce lower bound before upper bound.
-    assert n_edits >= 1, (
-        "n_edits must be >= 1; callers must handle the no-positions-left case "
-        "before calling."
-    )
-    assert n_edits <= len(mutable_positions), (
-        f"n_edits ({n_edits}) must be <= len(mutable_positions) "
-        f"({len(mutable_positions)})."
-    )
-    assert len(weights) == len(mutable_positions), (
-        f"position_weights length ({len(weights)}) must equal "
-        f"len(mutable_positions) ({len(mutable_positions)})."
-    )
-    assert np.all(weights >= 0), "All position_weights must be nonnegative."
-    assert np.any(weights > 0), "At least one position_weight must be > 0."
+    current_probs = np.asarray(probs, dtype=np.float64).copy()
+    assert np.all(current_probs >= 0), "All action probabilities must be nonnegative."
+    assert np.any(current_probs > 0), "At least one action probability must be > 0."
 
-    weights = weights / weights.sum()
+    n_positions = n_actions // 3
+    probs_2d = current_probs.reshape(n_positions, 3)
 
+    # ── Step 1: marginal position weights ────────────────────────────────────
+    pos_weights = probs_2d.sum(axis=1)  # shape (L,)
+    available_positions = np.where(pos_weights > 0)[0]
+    n_available = len(available_positions)
+    effective_n = min(n_edits, n_available)
+
+    # ── Step 2: draw N distinct positions in ONE call ────────────────────────
+    w_avail = pos_weights[available_positions]
     chosen_positions = rng.choice(
-        np.asarray(mutable_positions, dtype=np.int64),
-        size=n_edits,
+        available_positions,
+        size=effective_n,
         replace=False,
-        p=weights,
+        p=w_avail / w_avail.sum(),
     )
 
-    # Build the set of 3 non-reference bases once per chosen position.
-    all_bases = constants.VOCAB  # ["A", "C", "G", "T"]
-    mutant = list(sequence)
-    for pos in chosen_positions:
-        ref_base = sequence[int(pos)]
-        alt_bases = [b for b in all_bases if b != ref_base]
-        # Fix 3: str() ensures a plain Python str, not a numpy str scalar.
-        new_base = str(rng.choice(alt_bases))
-        mutant[int(pos)] = new_base
+    # ── Step 3: draw bases via vectorized inverse-CDF ────────────────────────
+    chosen_rows = probs_2d[chosen_positions]           # (effective_n, 3)
+    row_sums = np.maximum(chosen_rows.sum(axis=1, keepdims=True), 1e-30)
+    cond_probs = chosen_rows / row_sums                # (effective_n, 3)
+    cum = np.cumsum(cond_probs, axis=1)                # (effective_n, 3)
+    u = rng.random(effective_n)                        # (effective_n,)
+    # Vectorized per-row inverse-CDF: count how many CDF entries are < u[i]
+    base_offsets = np.minimum((cum < u[:, None]).sum(axis=1), 2)  # shape (effective_n,)
 
-    return "".join(mutant), [int(p) for p in chosen_positions]
+    # ── Build action indices and apply edits ─────────────────────────────────
+    selected_action_indices_arr = chosen_positions * 3 + base_offsets
+    mutant = list(sequence)
+    for action_idx in selected_action_indices_arr:
+        pos, char = pos_and_chars_to_mutate[int(action_idx)]
+        mutant[int(pos)] = str(char)
+    selected_action_indices = selected_action_indices_arr.tolist()
+
+    # ---------------------------------------------------------------------------
+    # p_final for the α-posterior: STEP-START policy probability (reading B).
+    #
+    # p_final[k] = probs[action_k], i.e. the probability the step-start policy
+    # assigned to the chosen action. It is deliberately the *unrenormalized*
+    # probs value, NOT probs[action]/remaining_mass.
+    #
+    # WHY (this is the subtle part):
+    #   The α-update is a surprise signal — "how much did the policy up/down-weight
+    #   the locations this child actually mutated, vs chance." α measures trust in
+    #   the ROOT gradient policy (1-α)g + α·U. The within-child sequential masking
+    #   (mask a position after editing it, then renormalize the remaining N-1 draws)
+    #   is a COMPUTATIONAL amortization trick — it funds many edits from one cached
+    #   gradient. It is not part of the belief model about which locations are good.
+    #
+    #   If we renormalized p_final per draw (call it "reading A"), the surprise for
+    #   each action would pick up a remaining_mass / n_available factor that depends
+    #   on draw ORDER and on which OTHER positions this child happened to hit. Two
+    #   children that mutate the same actions in different orders would then get
+    #   different α nudges, and a 5-edit child would get systematically different α
+    #   pressure than a 1-edit child on identical landscapes — coupling α (trust in
+    #   location) to N (edit count), which is the *other*, independent PBT axis (μ).
+    #   That is variance injected into the trust estimate for reasons unrelated to
+    #   whether the gradient was right.
+    #
+    #   Reading B evaluates the surprise against the step-start policy, so it is
+    #   invariant to edit count and draw order. It is also strictly simpler: no
+    #   per-draw state, and _compute_child_alpha's p_uniform = 1/n_avail (over the
+    #   step-start available actions) is already the correctly matched reference.
+    #
+    #   NOTE: across-STEP masking (rollout depth) still enters — it lives in the
+    #   carried, renormalized `probs` the caller passes in (with already-edited
+    #   positions zeroed) and in n_avail. Reading B only declines the extra
+    #   WITHIN-child renormalization across this step's N draws.
+    # ---------------------------------------------------------------------------
+    p_final_chosen_list = [float(current_probs[int(a)]) for a in selected_action_indices_arr]
+
+    # ── Position masking on the carried probs ────────────────────────────────
+    for pos_idx in chosen_positions:
+        current_probs[3 * pos_idx : 3 * pos_idx + 3] = 0.0
+
+    total_p = current_probs.sum()
+    if total_p > 0:
+        current_probs /= total_p
+
+    return "".join(mutant), selected_action_indices, current_probs, p_final_chosen_list
 
 
 def get_batched_fitness(
