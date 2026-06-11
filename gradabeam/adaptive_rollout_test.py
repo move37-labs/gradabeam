@@ -687,7 +687,6 @@ def test_alpha_base_coupling():
         rng_seed=0,
         strategy=GradientActionStrategy(),
         use_gradients=True,
-        allow_silent_edits=False,
         use_pbt=True,
         exploration_alpha=initial_alpha,
     )
