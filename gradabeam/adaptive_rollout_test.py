@@ -921,3 +921,168 @@ def test_normal_run_trajectory_unchanged_by_clamp():
             )
 
 
+# ---------------------------------------------------------------------------
+# pbt perturbation tests
+# ---------------------------------------------------------------------------
+
+
+def _make_pbt_designer(seed: int = 17) -> AdaptiveRolloutDesigner:
+    """Helper: gradient designer with use_pbt=True."""
+    return AdaptiveRolloutDesigner(
+        model_fn=testing_utils.CountLetterModel(),
+        start_sequence="AAAAAA",
+        mutations_per_sequence=1,
+        beam_size=3,
+        n_rollouts_per_root=2,
+        eval_batch_size=1,
+        rng_seed=seed,
+        strategy=GradientActionStrategy(),
+        use_gradients=True,
+        use_pbt=True,
+        exploration_alpha=0.5,
+    )
+
+
+def test_pbt_rate_perturb_rng_draw():
+    """_get_next_mutation_params must consume exactly one self.rng draw per call
+    when use_pbt=True (the perturbation draw)."""
+    designer = _make_pbt_designer(seed=99)
+    node = designer.current_nodes[0]
+    state_before = designer.rng.bit_generator.state["state"]["state"]
+    designer._get_next_mutation_params(node)
+    state_after = designer.rng.bit_generator.state["state"]["state"]
+    assert state_after != state_before, (
+        "use_pbt=True did not consume a self.rng draw — perturbation is broken."
+    )
+
+
+def test_pbt_rate_perturb_ratio_distribution():
+    """Over many calls, the multiset of new_rate/current_rate ratios must be ≈
+    {1.0: 0.80, 0.8: 0.10, 1.2: 0.10} (within 4-sigma sampling tolerance).
+
+    Also verifies that the base is current_rate (not n_edits): we fix
+    current_rate and check that new_rate / current_rate is always in {0.8, 1.0, 1.2}.
+    """
+    designer = _make_pbt_designer(seed=0)
+
+    # Build a node with a known current_rate well away from the clamp bounds.
+    L = len(designer.positions_to_mutate)  # 6
+    fixed_rate = 3.0  # middle of [1, L-1=5]; perturbation can go 2.4 or 3.6, both in range
+    node = RolloutNodeWithProbs(
+        seq="AAAAAA",
+        fitness=np.float32(0.0),
+        edits_since_root=0,
+        mutations_per_sequence=fixed_rate,
+        exploration_alpha=0.5,
+        probs=np.ones(18, dtype=np.float64) / 18,
+        gradient_probs=np.ones(18, dtype=np.float64) / 18,
+        pos_and_chars=ada_utils.build_uniform_pos_and_chars("AAAAAA", list(range(L))),
+    )
+
+    n_trials = 5000
+    # IEEE-754 note: 0.8 * 3.0 / 3.0 may not equal 0.8 exactly, so we bucket
+    # by proximity rather than exact equality.
+    _expected = (0.8, 1.0, 1.2)
+    buckets = {r: 0 for r in _expected}
+    for _ in range(n_trials):
+        _n_edits, new_rate = designer._get_next_mutation_params(node)
+        ratio = new_rate / fixed_rate
+        closest = min(_expected, key=lambda r: abs(ratio - r))
+        assert abs(ratio - closest) < 1e-6, (
+            f"new_rate/current_rate={ratio} is not close to any of {_expected}; "
+            f"new_rate={new_rate}, current_rate={fixed_rate}"
+        )
+        buckets[closest] += 1
+
+    total = sum(buckets.values())
+    assert total == n_trials
+
+    # p_perturb = 0.20 → 10% down, 10% up, 80% stay
+    for ratio, expected_p in [(0.8, 0.10), (1.0, 0.80), (1.2, 0.10)]:
+        observed_p = buckets[ratio] / n_trials
+        # 4-sigma bound: sigma = sqrt(p*(1-p)/n)
+        sigma = (expected_p * (1 - expected_p) / n_trials) ** 0.5
+        assert abs(observed_p - expected_p) < 4 * sigma, (
+            f"Ratio {ratio}: observed {observed_p:.4f}, expected {expected_p:.4f}, "
+            f"4-sigma bound {4*sigma:.4f}"
+        )
+
+
+def test_pbt_rate_perturb_clamp_composition():
+    """Repeated perturbations must never drive mu >= 1 or rate < 1.
+
+    We simulate a long run of _get_next_mutation_params calls, carrying the
+    returned new_rate forward as the next call's current_rate, to test that
+    the clamp prevents runaway rate growth or shrinkage.
+    """
+    designer = _make_pbt_designer(seed=7)
+    L = len(designer.positions_to_mutate)  # 6
+
+    current_rate = 1.0  # start near lower bound
+    n_steps = 2000
+
+    for i in range(n_steps):
+        node = RolloutNodeWithProbs(
+            seq="AAAAAA",
+            fitness=np.float32(0.0),
+            edits_since_root=0,
+            mutations_per_sequence=current_rate,
+            exploration_alpha=0.5,
+            probs=np.ones(18, dtype=np.float64) / 18,
+            gradient_probs=np.ones(18, dtype=np.float64) / 18,
+            pos_and_chars=ada_utils.build_uniform_pos_and_chars(
+                "AAAAAA", list(range(L))
+            ),
+        )
+        _n_edits, new_rate = designer._get_next_mutation_params(node)
+
+        assert new_rate >= 1.0, (
+            f"Step {i}: new_rate={new_rate} < 1.0 (lower clamp violated)"
+        )
+        mu = new_rate / L
+        assert mu < 1.0, (
+            f"Step {i}: mu={mu:.6f} >= 1.0 (upper clamp violated, new_rate={new_rate}, L={L})"
+        )
+        current_rate = new_rate
+
+
+def test_pbt_rate_n_edits_unchanged():
+    """n_edits (the edit count for this step) is returned as the raw sampler draw.
+
+    Verifies the return tuple contract: new_rate is the perturbed/clamped
+    inherited rate; n_edits is always the raw sampler draw.
+    """
+    model = testing_utils.CountLetterModel()
+    L = 6
+    designer = AdaptiveRolloutDesigner(
+        model_fn=model,
+        start_sequence="AAAAAA",
+        mutations_per_sequence=1,
+        beam_size=2,
+        n_rollouts_per_root=1,
+        eval_batch_size=1,
+        rng_seed=0,
+        strategy=GradientActionStrategy(),
+        use_gradients=True,
+        use_pbt=True,
+        exploration_alpha=0.5,
+    )
+    node = designer.current_nodes[0]
+
+    class _FixedSampler:
+        def sample(self, n):
+            return np.array([3] * n)
+
+    original_get_sampler = designer.get_sampler
+    designer.get_sampler = lambda rate: _FixedSampler()  # type: ignore[method-assign]
+    try:
+        n_edits, new_rate = designer._get_next_mutation_params(node)
+    finally:
+        designer.get_sampler = original_get_sampler
+
+    assert n_edits == 3, f"n_edits should be the raw sampler draw (3), got {n_edits}"
+    assert 1.0 <= new_rate <= L - 1, (
+        f"new_rate={new_rate} out of expected clamp range [1, {L-1}]"
+    )
+
+

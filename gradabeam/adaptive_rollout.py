@@ -629,15 +629,28 @@ class AdaptiveRolloutDesigner:
     def _get_next_mutation_params(
         self, node: RolloutNodeWithProbs
     ) -> tuple[int, float]:
+        # Rate/µ mapping:
+        #   code's `mutations_per_sequence` = rate = µ·L
+        #   paper's µ                       = per-position mutation probability
+        #   L                               = len(positions_to_mutate)
+        # Paper §4.3.1: µ_child = {0.8,1.2}·µ_parent with p_perturb=0.20.
+        # Applied here as new_rate = {0.8,1.2}·current_rate; multiplication
+        # commutes so the per-position and per-sequence forms are identical.
         current_rate = node.mutations_per_sequence
         n_edits = int(self.get_sampler(current_rate).sample(1)[0])
         if self.use_pbt:
-            # Cap strictly below L so mu = new_rate/L < 1, preventing _F_inverse
-            # blow-up.  L-1 is exact (no float fudge) and L >= 2 is guaranteed by
-            # the construction assert (mutations_per_sequence < L, and
-            # mutations_per_sequence >= 1 implies L >= 2).
-            _max_rate = len(self.positions_to_mutate) - 1
-            new_rate = float(np.clip(n_edits, 1.0, _max_rate))
+            # max(1.0, L-1): L-1 keeps mu = new_rate/L < 1; the max(1.0, ...)
+            # guard prevents clip inversion if L ever shrinks to ≤2.
+            _max_rate = max(1.0, len(self.positions_to_mutate) - 1)
+            p_perturb = 0.20
+            r = self.rng.random()
+            if r < p_perturb / 2:
+                new_rate = 0.8 * current_rate
+            elif r < p_perturb:
+                new_rate = 1.2 * current_rate
+            else:
+                new_rate = current_rate
+            new_rate = float(np.clip(new_rate, 1.0, _max_rate))
         else:
             new_rate = current_rate
         return n_edits, new_rate
