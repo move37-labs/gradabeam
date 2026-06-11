@@ -28,7 +28,6 @@ from scipy.special import softmax
 
 from gradabeam import ada_utils
 from gradabeam import constants
-from gradabeam import opt_utils
 from gradabeam import testing_utils
 
 
@@ -240,12 +239,6 @@ class AdaptiveRolloutDesigner:
                 )
             )
 
-        # ── best-ever tracker ────────────────────────────────────────────────
-        self.best_ever = opt_utils.BestEver(
-            sort_key=lambda x: (x.fitness, x.seq),
-            capacity=beam_size,
-        )
-
         # Filled by propose_sequences; read by tests.
         self.last_all_proposals: list[dict] = []
 
@@ -258,8 +251,6 @@ class AdaptiveRolloutDesigner:
             self._init_beam_actionspace(
                 start_sequence, beam_size, mutations_per_sequence
             )
-
-        self.best_ever.update(self.current_nodes)
 
     # ── sampler helpers (gradient/PBT path) ─────────────────────────────────
 
@@ -391,7 +382,6 @@ class AdaptiveRolloutDesigner:
             self._edit_count_log = []
         for _step in range(n_steps):
             self.current_nodes = self.propose_sequences(self.current_nodes)
-            self.best_ever.update(self.current_nodes)
             if self.debug and self.current_nodes:
                 print(f"Step {_step} top score: {self.current_nodes[0].fitness}")
         if self.debug and self._edit_count_log:
@@ -448,7 +438,13 @@ class AdaptiveRolloutDesigner:
         print("=" * 62)
 
     def get_samples(self, n_samples: int) -> list[str]:
-        return [x.seq for x in self.best_ever.best(n_samples)]
+        def _get_key(node: Any) -> Any:
+            try:
+                return node.sort_key
+            except AttributeError:
+                return (node.fitness, node.seq)
+        sorted_nodes = sorted(self.current_nodes, key=_get_key, reverse=True)
+        return [x.seq for x in sorted_nodes[:n_samples]]
 
     def get_batched_fitness(self, sequences: list[str]) -> np.ndarray:
         return ada_utils.get_batched_fitness(

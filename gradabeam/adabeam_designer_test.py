@@ -104,17 +104,6 @@ def test_eval_batch_size_sanity(eval_batch_size):
         # Add correctness checks.
 
 
-def test_best_ever_beats_or_matches_final_beam():
-    """best-ever fitness >= top fitness of the final beam."""
-    kwargs = AdaBeam.debug_init_args()
-    opt = AdaBeam(**kwargs)
-    opt.run(n_steps=5)
-
-    best_ever_fitness = opt.best_ever.best(1)[0].fitness
-    max_final_fitness = max(n.fitness for n in opt.current_nodes)
-    assert best_ever_fitness >= max_final_fitness
-
-
 def test_eval_batch_size_consistency():
     """Test that `eval_batch_size` is consistent."""
     model_fn = testing_utils.CountLetterModel()
