@@ -17,6 +17,7 @@ masking, which now correctly zeros all 3 actions of an edited position.
 
 from __future__ import annotations
 
+import collections
 import dataclasses
 from dataclasses import field
 from functools import lru_cache
@@ -224,6 +225,7 @@ class AdaptiveRolloutDesigner:
         self.max_rollout_len = max_rollout_len
         self.debug = debug
         self.mu = float(mutations_per_sequence) / len(self.positions_to_mutate)
+        self._edit_count_log: list[dict] = []
 
         # ── sampler setup ────────────────────────────────────────────────────
         # Both legacy and corrected-gradient-free paths use a single fixed-rate
@@ -385,11 +387,65 @@ class AdaptiveRolloutDesigner:
     # ── public API ───────────────────────────────────────────────────────────
 
     def run(self, n_steps: int) -> None:
+        if self.debug:
+            self._edit_count_log = []
         for _step in range(n_steps):
             self.current_nodes = self.propose_sequences(self.current_nodes)
             self.best_ever.update(self.current_nodes)
             if self.debug and self.current_nodes:
                 print(f"Step {_step} top score: {self.current_nodes[0].fitness}")
+        if self.debug and self._edit_count_log:
+            self._print_edit_count_report()
+
+    def _print_edit_count_report(self) -> None:
+        """Histogram of per-step N_drawn and N_changed; called at end of run() when debug=True.
+
+        Logs every proposed child (pre-acceptance) to reveal whether N is drawn
+        fresh each step or pinned.  No new RNG draws — reads only values already
+        computed in the rollout loops.
+        """
+        n_drawn_arr = np.array([d["n_drawn"] for d in self._edit_count_log])
+        n_changed_arr = np.array([d["n_changed"] for d in self._edit_count_log])
+
+        L = len(self.positions_to_mutate)
+        mps = self.mu * L
+        theoretical_mean = self.num_mutations_sampler.expected_num_edits()
+
+        def _hist(counts: dict, max_width: int = 50) -> None:
+            if not counts:
+                return
+            max_count = max(counts.values())
+            scale = max_count / max_width if max_count > max_width else 1
+            for k in sorted(counts):
+                bar = "#" * int(counts[k] / scale)
+                print(f"  {k:4d} | {bar:<{max_width}} {counts[k]}")
+
+        print()
+        print("=" * 62)
+        print("Edit-count log  (every proposed child, pre-acceptance)")
+        print("=" * 62)
+        print(f"  L (positions_to_mutate)    : {L}")
+        print(f"  mutations_per_sequence     : {mps:.4f}")
+        print(f"  mu = mps / L               : {self.mu:.6f}")
+        print(f"  TruncBinom(L, mu) mean     : {theoretical_mean:.4f}")
+        print()
+        freq_drawn = collections.Counter(n_drawn_arr.tolist())
+        print(f"N_drawn  (n={len(n_drawn_arr):,})")
+        print("-" * 40)
+        _hist(freq_drawn)
+        print()
+        print(f"  min    : {n_drawn_arr.min()}")
+        print(f"  max    : {n_drawn_arr.max()}")
+        print(f"  mean   : {n_drawn_arr.mean():.4f}")
+        print(f"  std    : {n_drawn_arr.std():.4f}")
+        print()
+        freq_changed = collections.Counter(n_changed_arr.tolist())
+        print(f"N_changed  (n={len(n_changed_arr):,})")
+        print("-" * 40)
+        _hist(freq_changed)
+        print()
+        print(f"  mean   : {n_changed_arr.mean():.4f}")
+        print("=" * 62)
 
     def get_samples(self, n_samples: int) -> list[str]:
         return [x.seq for x in self.best_ever.best(n_samples)]
@@ -443,6 +499,12 @@ class AdaptiveRolloutDesigner:
             while len(parent_nodes) > 0 and cur_rollout_length < self.max_rollout_len:
                 num_edit_locs = self.num_mutations_sampler.sample(len(parent_nodes))
                 children = self._mutate_legacy_nodes(parent_nodes, num_edit_locs)
+                if self.debug:
+                    for _n_d, _child, _par in zip(num_edit_locs, children, parent_nodes):
+                        self._edit_count_log.append({
+                            "n_drawn": int(_n_d),
+                            "n_changed": sum(a != b for a, b in zip(_child.seq, _par.seq)),
+                        })
                 sequences.update(children)
                 cur_rollout_length += 1
 
@@ -553,6 +615,12 @@ class AdaptiveRolloutDesigner:
                     num_edit_locs,
                     [n.mutations_per_sequence for n in parent_nodes],
                 )
+                if self.debug:
+                    for _n_d, _child, _par in zip(num_edit_locs, children, parent_nodes):
+                        self._edit_count_log.append({
+                            "n_drawn": int(_n_d),
+                            "n_changed": sum(a != b for a, b in zip(_child.seq, _par.seq)),
+                        })
                 nodes_visited.update(children)
                 cur_rollout_length += 1  # incremented AFTER generating
 
