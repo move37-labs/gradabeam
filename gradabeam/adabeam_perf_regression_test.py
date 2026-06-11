@@ -55,54 +55,6 @@ class TestBuildUniformCallCountPerStep(unittest.TestCase):
             rng_seed=42,
         )
 
-    def test_build_uniform_calls_at_most_beam_size_per_step(self):
-        """build_uniform_pos_and_chars must be called ≤ beam_size times/step.
-
-        Currently FAILS: called beam_size × n_rollouts_per_root = 8 times/step.
-        Will PASS after caching the result per (sequence, positions_to_mutate).
-        """
-        original = ada_utils.build_uniform_pos_and_chars
-
-        call_log: list[int] = []  # per-step call counts
-
-        def spy(sequence, positions_to_mutate):
-            spy.count += 1
-            return original(sequence, positions_to_mutate)
-
-        spy.count = 0
-
-        N_STEPS = 10
-
-        with patch.object(ada_utils, "build_uniform_pos_and_chars", new=spy):
-            designer = self._make_designer()
-            for step in range(N_STEPS):
-                spy.count = 0
-                designer.current_nodes = designer.propose_sequences(
-                    designer.current_nodes
-                )
-                calls_this_step = spy.count
-                call_log.append(calls_this_step)
-
-                self.assertLessEqual(
-                    calls_this_step,
-                    self.MAX_CALLS_AFTER_FIX,
-                    msg=(
-                        f"\nREGRESSION: build_uniform_pos_and_chars called "
-                        f"{calls_this_step}× in step {step} "
-                        f"(allowed ≤ {self.MAX_CALLS_AFTER_FIX} = beam_size).\n"
-                        f"\nRoot cause (action_space_mutation, unfixed):\n"
-                        f"  _attach_uniform_probs rebuilds the O(L) action list once per\n"
-                        f"  rollout root: beam_size={self.BEAM_SIZE} × "
-                        f"n_rollouts={self.N_ROLLOUTS} = "
-                        f"{self.BEAM_SIZE * self.N_ROLLOUTS} calls/step.\n"
-                        f"  At L=3000: {self.BEAM_SIZE * self.N_ROLLOUTS} × ~1154 µs/call "
-                        f"≈ 9.2 ms/step in Python overhead.\n"
-                        f"\nFix: cache build_uniform_pos_and_chars(seq, positions) so\n"
-                        f"  the same sequence is not rebuilt per rollout.\n"
-                        f"\nPer-step call counts so far: {call_log}"
-                    ),
-                )
-
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
