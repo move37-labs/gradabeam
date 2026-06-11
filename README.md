@@ -70,7 +70,7 @@ optimizer = GradaBeam(
     mutations_per_sequence=2.0,
     beam_size=10,
     n_rollouts_per_root=4,
-    exploration_alpha=0.05,       # 0.0 = fully gradient-guided, 1.0 = uniform random
+    exploration_alpha=0.5,       # 0.0 = fully gradient-guided, 1.0 = uniform random
     use_pbt=True,                 # adapt the mutation rate via Population Based Training
 )
 
@@ -121,7 +121,7 @@ python -m gradabeam \
     --beam_size 5 \
     --mutations_per_sequence 2.0 \
     --n_rollouts_per_root 4 \
-    --exploration_alpha 0.05 \
+    --exploration_alpha 0.5 \
     --use_pbt True
 
 # AdaBeam demo: maximize occurrences of a target substring (oracle arg passed through)
