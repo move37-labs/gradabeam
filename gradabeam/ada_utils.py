@@ -167,6 +167,12 @@ class ModelWrapper:
 
 def _F_inverse(mu: float, seq_len: int) -> float:
     """F_inverse = 1 - (1-mu')^l"""
+    if mu >= 1.0:
+        raise ValueError(
+            f"_F_inverse requires mu < 1.0 (got mu={mu!r}). "
+            "Check that mutations_per_sequence < len(positions_to_mutate) "
+            "and that the PBT rate clamp is active."
+        )
     return -np.expm1(seq_len * np.log1p(-mu))
 
 

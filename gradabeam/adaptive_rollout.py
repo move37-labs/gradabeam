@@ -161,9 +161,9 @@ class AdaptiveRolloutDesigner:
         assert min(self.positions_to_mutate) >= 0
         assert max(self.positions_to_mutate) < len(start_sequence)
         assert mutations_per_sequence > 0
-        assert mutations_per_sequence <= len(self.positions_to_mutate), (
-            f"mutations_per_sequence ({mutations_per_sequence}) must be <= "
-            f"len(positions_to_mutate) ({len(self.positions_to_mutate)})"
+        assert mutations_per_sequence < len(self.positions_to_mutate), (
+            f"mutations_per_sequence ({mutations_per_sequence}) must be < "
+            f"len(positions_to_mutate) ({len(self.positions_to_mutate)}) so mu < 1"
         )
         assert beam_size > 0
         assert n_rollouts_per_root > 0
@@ -632,7 +632,12 @@ class AdaptiveRolloutDesigner:
         current_rate = node.mutations_per_sequence
         n_edits = int(self.get_sampler(current_rate).sample(1)[0])
         if self.use_pbt:
-            new_rate = float(np.clip(n_edits, 1.0, len(self.positions_to_mutate)))
+            # Cap strictly below L so mu = new_rate/L < 1, preventing _F_inverse
+            # blow-up.  L-1 is exact (no float fudge) and L >= 2 is guaranteed by
+            # the construction assert (mutations_per_sequence < L, and
+            # mutations_per_sequence >= 1 implies L >= 2).
+            _max_rate = len(self.positions_to_mutate) - 1
+            new_rate = float(np.clip(n_edits, 1.0, _max_rate))
         else:
             new_rate = current_rate
         return n_edits, new_rate

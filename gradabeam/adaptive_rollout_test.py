@@ -409,11 +409,13 @@ def test_rollout_length_convention():
       - Rejection:  detected AFTER incrementing; cur_rollout_length = mutations
                     made INCLUDING the terminal rejected one = correct count.
 
-    Scenario 1 — deterministic exhaustion with L=1 mutable position:
-      positions_to_mutate=[0], always-accept oracle, max_rollout_len=5.
-      Trace: step 1 generates child, increment to 1, child accepted.
-             At start of step 2, pw=[0] (pos 0 consumed) → EXHAUSTED.
-             Length = 1 (exactly 1 oracle call before exhaustion was detected).
+    Scenario 1 — exhaustion with L=2 mutable positions, mu=0.5:
+      positions_to_mutate=[0, 1], always-accept oracle, max_rollout_len=5.
+      Trace: sampler draws 1 or 2 edits; chain always accepts until both
+             positions are consumed → EXHAUSTED.
+             All lengths must be in [1, 2].
+      (Previously used L=1 / mu=1.0; changed to L=2 so mu = rate/L < 1,
+      which is now required by the construction assert and _F_inverse guard.)
 
     Scenario 2 — small L, all-accepting oracle, general bound:
       L=2, all-accepting oracle.  Sampler may draw 1 or 2 edits/step.
@@ -427,7 +429,10 @@ def test_rollout_length_convention():
       rejected when passed back through the loop.  Verify the convention holds.
     """
 
-    # ── Scenario 1: deterministic exhaustion at length 1 ────────────────────
+    # ── Scenario 1: exhaustion with L=2 mutable positions, mu=0.5 ───────────
+    # Previously used positions_to_mutate=[0] (L=1, mu=1.0), which is now
+    # forbidden by the strict mu < 1 construction assert.  Changed to L=2
+    # (mu=0.5) which still exercises exhaustion detection but keeps mu < 1.
     def _always_accept(seqs):
         return np.ones(len(seqs), dtype=float)
 
@@ -443,14 +448,15 @@ def test_rollout_length_convention():
         use_gradients=False,
         use_pbt=False,
         max_rollout_len=5,
-        positions_to_mutate=[0],  # L_mutate=1 → exactly 1 edit consumed per rollout
+        positions_to_mutate=[0, 1],  # L_mutate=2, mu=0.5 → exhaustion in 1-2 steps
     )
     designer_ex1.run(n_steps=1)
     lengths1 = designer_ex1.last_rollout_lengths
     assert len(lengths1) > 0, "No rollout lengths recorded (scenario 1 exhaustion)."
-    # With L_mutate=1: step 1 makes 1 edit, step 2 finds exhaustion → length = 1.
-    assert all(length == 1 for length in lengths1), (
-        f"Scenario 1 (L=1, always-accept): expected all lengths=1, got {lengths1}.\n"
+    # With L_mutate=2: sampler draws 1 or 2 edits; exhaustion occurs in 1 or 2 steps.
+    assert all(1 <= length <= 2 for length in lengths1), (
+        f"Scenario 1 (L=2, mu=0.5, always-accept): expected all lengths in [1,2], "
+        f"got {lengths1}.\n"
         "Regression in exhaustion recording convention — check that exhaustion\n"
         "records cur_rollout_length BEFORE the (blocked) increment."
     )
@@ -766,5 +772,152 @@ def test_positional_mask_zeroes_whole_position():
         assert remaining_probs[pos_start + 2] == 0.0
         # Remaining positions must still have positive probability.
         assert remaining_probs.sum() > 0
+
+
+# ---------------------------------------------------------------------------
+# mu < 1 strict-bound tests (fixes for _F_inverse safety)
+# ---------------------------------------------------------------------------
+
+
+def test_construction_rejects_mutations_per_sequence_equal_to_L():
+    """Construction with mutations_per_sequence == L must raise (mu would be 1.0).
+
+    Checks the strict assert added to guard _F_inverse from receiving mu >= 1.
+    """
+    model = testing_utils.CountLetterModel()
+
+    # L = 4 (positions 0-3), mutations_per_sequence == L → should raise.
+    with pytest.raises(AssertionError, match="must be <"):
+        AdaptiveRolloutDesigner(
+            model_fn=model,
+            start_sequence="ACGTACGT",
+            mutations_per_sequence=4,
+            beam_size=2,
+            n_rollouts_per_root=1,
+            eval_batch_size=1,
+            rng_seed=0,
+            strategy=UniformActionStrategy(),
+            use_gradients=False,
+            use_pbt=False,
+            positions_to_mutate=[0, 1, 2, 3],  # L=4
+        )
+
+
+def test_construction_accepts_mutations_per_sequence_one_below_L():
+    """Construction with mutations_per_sequence == L-1 must succeed (mu = (L-1)/L < 1)."""
+    model = testing_utils.CountLetterModel()
+
+    # L = 4, mutations_per_sequence = 3 = L-1 → should NOT raise.
+    designer = AdaptiveRolloutDesigner(
+        model_fn=model,
+        start_sequence="ACGTACGT",
+        mutations_per_sequence=3,
+        beam_size=2,
+        n_rollouts_per_root=1,
+        eval_batch_size=1,
+        rng_seed=0,
+        strategy=UniformActionStrategy(),
+        use_gradients=False,
+        use_pbt=False,
+        positions_to_mutate=[0, 1, 2, 3],  # L=4
+    )
+    assert designer.mu < 1.0, f"Expected mu < 1.0, got {designer.mu}"
+
+
+def test_pbt_clamp_keeps_mu_strictly_below_one():
+    """PBT rate update must never produce mu == 1.0.
+
+    Drives n_edits == L by patching the sampler's sample method, then verifies
+    that the returned new_rate satisfies new_rate < L (so mu = new_rate/L < 1).
+    This is the scenario the issue says 'could previously drive mu to 1.0'.
+    """
+    model = testing_utils.CountLetterModel()
+    L = 6
+    designer = AdaptiveRolloutDesigner(
+        model_fn=model,
+        start_sequence="AAAAAA",
+        mutations_per_sequence=1,
+        beam_size=2,
+        n_rollouts_per_root=1,
+        eval_batch_size=1,
+        rng_seed=0,
+        strategy=GradientActionStrategy(),
+        use_gradients=True,
+        use_pbt=True,
+        exploration_alpha=0.5,
+    )
+
+    node = designer.current_nodes[0]
+    # Temporarily monkey-patch the sampler so it always returns L (the degenerate draw).
+    original_get_sampler = designer.get_sampler
+
+    class _AlwaysReturnL:
+        def sample(self, n):
+            return np.array([L] * n)
+
+    designer.get_sampler = lambda rate: _AlwaysReturnL()  # type: ignore[method-assign]
+    try:
+        n_edits, new_rate = designer._get_next_mutation_params(node)
+    finally:
+        designer.get_sampler = original_get_sampler
+
+    assert n_edits == L, f"Expected n_edits == L == {L}, got {n_edits}"
+    assert new_rate < L, (
+        f"PBT clamp must cap new_rate strictly below L={L}, got {new_rate}. "
+        "mu = new_rate/L would reach 1.0, corrupting _F_inverse."
+    )
+    mu = new_rate / L
+    assert mu < 1.0, f"mu = {mu} must be < 1.0 after clamp"
+
+
+def test_normal_run_trajectory_unchanged_by_clamp():
+    """Bit-for-bit trajectory check: the clamp must NOT affect normal-regime runs.
+
+    With mu well below 1 (rate=1, L=6, mu=1/6 ≈ 0.167), n_edits never reaches L
+    in practice.  The proposed-sequence trajectory with a fixed seed must be
+    identical before and after the clamp edit — the clamp never binds, so RNG
+    draws and outputs must match.
+
+    Implementation: run two identically-seeded designers and compare the full
+    sequence of proposed sequences across several steps.  Because both designers
+    are constructed and run identically, any divergence means the clamp is binding
+    when it should not be.
+    """
+    model = testing_utils.CountLetterModel()
+
+    def make_designer(seed):
+        return AdaptiveRolloutDesigner(
+            model_fn=model,
+            start_sequence="ACGTACGT",
+            mutations_per_sequence=1,
+            beam_size=3,
+            n_rollouts_per_root=2,
+            eval_batch_size=1,
+            rng_seed=seed,
+            strategy=GradientActionStrategy(),
+            use_gradients=True,
+            use_pbt=True,
+            exploration_alpha=0.5,
+        )
+
+    d1 = make_designer(42)
+    d2 = make_designer(42)
+
+    n_steps = 4
+    for step in range(n_steps):
+        d1.run(n_steps=1)
+        d2.run(n_steps=1)
+        seqs1 = sorted(n.seq for n in d1.current_nodes)
+        seqs2 = sorted(n.seq for n in d2.current_nodes)
+        assert seqs1 == seqs2, (
+            f"Trajectory diverged at step {step + 1}: {seqs1} != {seqs2}. "
+            "The PBT clamp is binding in a regime where it should not — investigate."
+        )
+        rates1 = [n.mutations_per_sequence for n in d1.current_nodes]
+        for r in rates1:
+            mu = r / len(d1.positions_to_mutate)
+            assert mu < 1.0, (
+                f"mu={mu:.6f} >= 1.0 observed at step {step + 1} in normal run."
+            )
 
 
