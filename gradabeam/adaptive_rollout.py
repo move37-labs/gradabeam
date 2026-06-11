@@ -95,18 +95,9 @@ class RolloutNodeWithProbs(ada_utils.RolloutNode):
 class UniformActionStrategy:
     """Uniform action-space strategy (corrected AdaBeam/gradients-off)."""
 
-    def __init__(self, allow_silent_edits: bool = False) -> None:
-        self.allow_silent_edits = allow_silent_edits
-
-    def is_legacy(self) -> bool:
-        return self.allow_silent_edits
-
 
 class GradientActionStrategy:
     """Gradient-guided action-space strategy (GrAdaBeam)."""
-
-    def is_legacy(self) -> bool:
-        return False
 
 
 # ---------------------------------------------------------------------------
@@ -117,15 +108,14 @@ class GradientActionStrategy:
 class AdaptiveRolloutDesigner:
     """Unified beam-search sequence designer.
 
-    Three operator/gradient paths (routed by propose_sequences):
+    Two operator/gradient paths (routed by propose_sequences):
 
-    +-----------------------------+----------------+------------------------------+
-    | strategy.is_legacy()        | use_gradients  | path                         |
-    +-----------------------------+----------------+------------------------------+
-    | True  (allow_silent_edits)  | False (only)   | legacy / reproduction-only   |
-    | False                       | False          | corrected gradient-free      |
-    | False                       | True           | gradient-guided (GradaBeam)  |
-    +-----------------------------+----------------+------------------------------+
+    +----------------+------------------------------+
+    | use_gradients  | path                         |
+    +----------------+------------------------------+
+    | False          | corrected gradient-free      |
+    | True           | gradient-guided (GradaBeam)  |
+    +----------------+------------------------------+
 
     Parameters
     ----------
@@ -134,10 +124,6 @@ class AdaptiveRolloutDesigner:
     use_gradients : bool
         When True, compute TISM at each rollout root.
         When False, skip TISM (no tism_cost charged to ModelWrapper).
-    allow_silent_edits : bool
-        True  → legacy operator (~25% silent edits, bit-for-bit RNG match
-                 with published AdaBeam).  Must use with use_gradients=False.
-        False → corrected position-space operator (never silent).
     use_pbt : bool
         Enable Population Based Training for adaptive mutation rate and α.
     exploration_alpha : float
@@ -155,7 +141,6 @@ class AdaptiveRolloutDesigner:
         n_rollouts_per_root: int,
         strategy: UniformActionStrategy | GradientActionStrategy,
         use_gradients: bool,
-        allow_silent_edits: bool,
         use_pbt: bool,
         exploration_alpha: float = 0.5,
         gradient_prob_cap: float = 0.10,
@@ -189,18 +174,11 @@ class AdaptiveRolloutDesigner:
             assert 0.0 <= exploration_alpha <= 1.0
 
         # Strategy / gradient combination validation
-        if strategy.is_legacy() and use_gradients:
-            raise ValueError(
-                "allow_silent_edits=True (legacy) is incompatible with "
-                "use_gradients=True.  The legacy operator is reproduction-only "
-                "and does not use TISM."
-            )
         if isinstance(strategy, GradientActionStrategy) and not use_gradients:
             raise ValueError("GradientActionStrategy requires use_gradients=True.")
 
         self.strategy = strategy
         self.use_gradients = use_gradients
-        self.allow_silent_edits = allow_silent_edits
         self.use_pbt = use_pbt
         self.exploration_alpha = exploration_alpha
         self.gradient_prob_cap = gradient_prob_cap
@@ -243,9 +221,7 @@ class AdaptiveRolloutDesigner:
         self.last_all_proposals: list[dict] = []
 
         # ── initial beam ─────────────────────────────────────────────────────
-        if strategy.is_legacy():
-            self._init_beam_legacy(start_sequence, beam_size, mutations_per_sequence)
-        elif use_gradients:
+        if use_gradients:
             self._init_beam_gradient(start_sequence, beam_size, mutations_per_sequence)
         else:
             self._init_beam_actionspace(
@@ -276,24 +252,6 @@ class AdaptiveRolloutDesigner:
         )
 
     # ── initial beam helpers ─────────────────────────────────────────────────
-
-    def _init_beam_legacy(
-        self,
-        start_sequence: str,
-        beam_size: int,
-        mutations_per_sequence: float,
-    ) -> None:
-        """AdaBeam-compatible initial beam (no TISM, uses legacy operator)."""
-        seed_node = ada_utils.RolloutNode(
-            seq=start_sequence, fitness=np.float32(np.nan)
-        )
-        num_edit_locs = self.num_mutations_sampler.sample(beam_size)
-        self.current_nodes: list = []
-        for i in range(0, beam_size, self.eval_batch_size):
-            cur_edits = num_edit_locs[i : i + self.eval_batch_size]
-            self.current_nodes.extend(
-                self._mutate_legacy_nodes([seed_node] * len(cur_edits), cur_edits)
-            )
 
     def _init_beam_gradient(
         self,
@@ -457,114 +415,13 @@ class AdaptiveRolloutDesigner:
         """Route to the correct operator path based on strategy and gradient flag.
 
         Routing table:
-          strategy.is_legacy()=True              → _propose_sequences_legacy
-          strategy.is_legacy()=False, no grads   → _propose_sequences_actionspace
-          strategy.is_legacy()=False, with grads → _propose_sequences_gradient
+          no grads   → _propose_sequences_actionspace
+          with grads → _propose_sequences_gradient
         """
-        if self.strategy.is_legacy():
-            return self._propose_sequences_legacy(root_nodes)
-        elif not self.use_gradients:
+        if not self.use_gradients:
             return self._propose_sequences_actionspace(root_nodes)
         else:
             return self._propose_sequences_gradient(root_nodes)
-
-    # ── Path 1: legacy / reproduction-only ──────────────────────────────────
-
-    def _propose_sequences_legacy(self, root_nodes: list) -> list:
-        """Verbatim replication of AdaBeam.propose_sequences for bit-for-bit match.
-
-        REPRODUCTION-ONLY: exact RNG-for-RNG replication of published AdaBeam
-        (generate_random_mutant_v2, 4-base sampling, ~25% silent edits).
-        Reachable only via allow_silent_edits=True; never the default, never
-        used on the corrected or gradient paths.  Pinned by
-        test_adabeam_equivalence — do not "simplify" or remove without
-        regenerating the golden fixture and the published-paper RNG analysis.
-
-        Uses ada_utils.RolloutNode (simple seq+fitness) so the set-deduplication
-        semantics match AdaBeam exactly.  Sorts by (fitness, seq) only.
-        """
-        sequences: set = set()
-        rollout_lengths: list[int] = []
-        root_nodes_effective = root_nodes * self.n_rollouts_per_root
-
-        for i in range(0, len(root_nodes_effective), self.eval_batch_size):
-            cur_root_nodes = root_nodes_effective[i : i + self.eval_batch_size]
-            parent_nodes = cur_root_nodes
-            cur_rollout_length = 0
-
-            while len(parent_nodes) > 0 and cur_rollout_length < self.max_rollout_len:
-                num_edit_locs = self.num_mutations_sampler.sample(len(parent_nodes))
-                children = self._mutate_legacy_nodes(parent_nodes, num_edit_locs)
-                if self.debug:
-                    for _n_d, _child, _par in zip(num_edit_locs, children, parent_nodes):
-                        self._edit_count_log.append({
-                            "n_drawn": int(_n_d),
-                            "n_changed": sum(a != b for a, b in zip(_child.seq, _par.seq)),
-                        })
-                sequences.update(children)
-                cur_rollout_length += 1
-
-                new_nodes = []
-                for child, cmp_node in zip(children, parent_nodes):
-                    if child.fitness >= cmp_node.fitness:
-                        new_nodes.append(child)
-                    else:
-                        rollout_lengths.append(cur_rollout_length)
-                parent_nodes = new_nodes
-
-        if not sequences:
-            raise ValueError("No sequences generated.")
-
-        sorted_sequences = sorted(
-            sequences, key=lambda x: (x.fitness, x.seq), reverse=True
-        )
-        self.last_all_proposals = [
-            {"seq": n.seq, "fitness": float(n.fitness)} for n in sorted_sequences
-        ]
-        return sorted_sequences[: self.beam_size]
-
-    def _mutate_legacy_nodes(
-        self,
-        nodes: list,
-        num_edit_locs: list[int] | np.ndarray,
-        max_num_tries: int = 300,
-    ) -> list:
-        """Mutation using generate_random_mutant_v2 — exact AdaBeam RNG pattern.
-
-        REPRODUCTION-ONLY: preserves the 4-base (A/C/G/T) sampling that allows
-        ~25% silent edits, matching the published AdaBeam exactly.  Do not
-        substitute generate_random_mutant_actionspace here.
-        """
-        assert len(nodes) == len(num_edit_locs) <= self.eval_batch_size
-        seqs = []
-        for n, random_n_loc in zip(nodes, num_edit_locs):
-            try_cnt = 0
-            while True:
-                candidate = ada_utils.generate_random_mutant_v2(
-                    sequence=n.seq,
-                    positions_to_mutate=self.positions_to_mutate,
-                    random_n_loc=int(random_n_loc),
-                    alphabet=self.alphabet,
-                    rng=self.rng,
-                )
-                try_cnt += 1
-                if not self.skip_repeat_sequences or not self.model.str_in_cache(
-                    candidate
-                ):
-                    break
-                if try_cnt > max_num_tries:
-                    raise ValueError(
-                        f"Couldn't find unique child after {try_cnt} tries."
-                    )
-                if self.debug and try_cnt % 50 == 0:
-                    print(f"Couldn't find unique child after {try_cnt} tries…")
-            seqs.append(candidate)
-
-        fitnesses = self.get_batched_fitness(seqs)
-        return [
-            ada_utils.RolloutNode(seq=seq, fitness=np.float32(float(f)))
-            for seq, f in zip(seqs, fitnesses)
-        ]
 
     # ── Path 2: corrected gradient-free (corrected AdaBeam) ─────────────────
 
@@ -992,7 +849,6 @@ class AdaptiveRolloutDesigner:
             "rng_seed": 42,
             "strategy": GradientActionStrategy(),
             "use_gradients": True,
-            "allow_silent_edits": False,
             "use_pbt": True,
             "exploration_alpha": 0.5,
         }
