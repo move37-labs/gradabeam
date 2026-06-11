@@ -225,11 +225,17 @@ class AdaBeam:
                 children = self.mutate_nodes(parent_nodes, num_edit_locs)
 
                 if self.debug:
-                    for _n_d, _child, _par in zip(num_edit_locs, children, parent_nodes):
-                        self._edit_count_log.append({
-                            "n_drawn": int(_n_d),
-                            "n_changed": sum(a != b for a, b in zip(_child.seq, _par.seq)),
-                        })
+                    for _n_d, _child, _par in zip(
+                        num_edit_locs, children, parent_nodes
+                    ):
+                        self._edit_count_log.append(
+                            {
+                                "n_drawn": int(_n_d),
+                                "n_changed": sum(
+                                    a != b for a, b in zip(_child.seq, _par.seq)
+                                ),
+                            }
+                        )
 
                 # Add these children to the candidate set of new sequences.
                 sequences.update(children)
