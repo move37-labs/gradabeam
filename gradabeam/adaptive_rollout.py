@@ -58,7 +58,7 @@ class RolloutNodeWithProbs(ada_utils.RolloutNode):
     gradient_probs : np.ndarray or None
         3L vector of pure-gradient action probabilities from the most recent TISM
         call, before any masking or mixing. Used to recompute P_final for the α-update.
-        None for the legacy path and for the corrected gradient-free path.
+        None for the corrected gradient-free path.
     """
 
     probs: np.ndarray | None = field(default=None, hash=False, compare=False)
@@ -128,8 +128,6 @@ class AdaptiveRolloutDesigner:
         Enable Population Based Training for adaptive mutation rate and α.
     exploration_alpha : float
         Initial mixing coefficient (0=pure gradient, 1=pure uniform).
-    skip_repeat_sequences : bool
-        Legacy AdaBeam option: retry mutation until a novel sequence is found.
     """
 
     def __init__(
@@ -150,7 +148,6 @@ class AdaptiveRolloutDesigner:
         eval_batch_size: int = 1,
         max_rollout_len: int = 200,
         debug: bool = False,
-        skip_repeat_sequences: bool = False,
     ) -> None:
         self.positions_to_mutate: list[int] = positions_to_mutate or list(
             range(len(start_sequence))
@@ -183,7 +180,6 @@ class AdaptiveRolloutDesigner:
         self.exploration_alpha = exploration_alpha
         self.gradient_prob_cap = gradient_prob_cap
         self.max_logit = max_logit
-        self.skip_repeat_sequences = skip_repeat_sequences
 
         self.model = ada_utils.ModelWrapper(
             model_fn,
@@ -205,8 +201,8 @@ class AdaptiveRolloutDesigner:
         self._edit_count_log: list[dict] = []
 
         # ── sampler setup ────────────────────────────────────────────────────
-        # Both legacy and corrected-gradient-free paths use a single fixed-rate
-        # sampler (matches AdaBeam's sampler structure).  The gradient path uses
+        # The corrected gradient-free path uses a single fixed-rate sampler
+        # (matches AdaBeam's sampler structure).  The gradient path uses
         # the PBT-per-node get_sampler() / _get_sampler_cached() instead.
         if not use_gradients:
             self.num_mutations_sampler: ada_utils.NumberEditsSampler = (
@@ -295,8 +291,8 @@ class AdaptiveRolloutDesigner:
     ) -> None:
         """Corrected gradient-free initial beam (uniform action weights).
 
-        Bug 2 (NaN fitness) analysis: seed_node carries fitness=np.float32(nan)
-        — the same convention used by _init_beam_legacy.  This NaN is safe:
+        Bug 2 (NaN fitness) analysis: seed_node carries fitness=np.float32(nan).
+        This NaN is safe:
           * _mutate_gradient_nodes only reads node.seq, node.probs,
             node.exploration_alpha, and node.edits_since_root from the seed;
             children receive their fitness from get_batched_fitness(), not from
@@ -818,24 +814,6 @@ class AdaptiveRolloutDesigner:
         uniform_probs = np.ones(n_actions) / n_actions
         final_probs = (1.0 - alpha) * gradient_probs + alpha * uniform_probs
         return final_probs / final_probs.sum()
-
-    def logits_to_probs(self, logits: np.ndarray, alpha: float) -> np.ndarray:
-        """Convert 3L logits to mixed (gradient + uniform) action probabilities."""
-        gradient_probs = self._logits_to_gradient_probs(logits)
-        return self.mix_gradient_with_uniform(gradient_probs, alpha)
-
-    def probabilities_over_actions_from_tism(
-        self, nodes: list[RolloutNodeWithProbs]
-    ) -> tuple[list[np.ndarray], list[PositionsAndCharactersType]]:
-        """Return (probs_list, pos_and_chars_list) from TISM calls."""
-        probs_list, pac_list = [], []
-        for n in nodes:
-            pos_and_chars, logits = self.model.get_tism(
-                sequence=n.seq, idxs=self.tism_positions, debug=self.debug
-            )
-            probs_list.append(self.logits_to_probs(logits, n.exploration_alpha))
-            pac_list.append(pos_and_chars)
-        return probs_list, pac_list
 
     @staticmethod
     def debug_init_args() -> dict:

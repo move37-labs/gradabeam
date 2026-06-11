@@ -42,12 +42,3 @@ class CountLetterModel(torch.nn.Module, TISMModelClass):
     def __call__(self, x):
         return self.inference_on_strings(x)
 
-    @property
-    def data_params(self):
-        return {
-            "tasks": {"name": [f"task{i}" for i in range(3)] + ["Neuron"]},
-            "train": {"seq_len": 200},
-        }
-
-    def get_task_idxs(self, *args, **kwargs):
-        return [0, 1, 2]

@@ -27,7 +27,6 @@ class AdaBeam(AdaptiveRolloutDesigner):
         beam_size: int,
         n_rollouts_per_root: int,
         eval_batch_size: int,
-        skip_repeat_sequences: bool,
         rng_seed: int = 0,
         positions_to_mutate: list[int] | None = None,
         max_rollout_len: int = 200,
@@ -42,7 +41,6 @@ class AdaBeam(AdaptiveRolloutDesigner):
             beam_size: Candidates to keep between rounds.
             n_rollouts_per_root: Rollouts launched per beam candidate per round.
             eval_batch_size: Oracle calls per batch.
-            skip_repeat_sequences: Retry mutation until a novel sequence is found.
             rng_seed: Pseudo-random seed.
             positions_to_mutate: 0-based positions that may be mutated; None = all.
             max_rollout_len: Maximum rollout depth before terminating.
@@ -62,7 +60,6 @@ class AdaBeam(AdaptiveRolloutDesigner):
             strategy=UniformActionStrategy(),
             use_gradients=False,
             use_pbt=False,
-            skip_repeat_sequences=skip_repeat_sequences,
         )
 
     @staticmethod
@@ -74,6 +71,5 @@ class AdaBeam(AdaptiveRolloutDesigner):
             "mutations_per_sequence": 1,
             "n_rollouts_per_root": 4,
             "eval_batch_size": 1,
-            "skip_repeat_sequences": False,
             "rng_seed": 42,
         }

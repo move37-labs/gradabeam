@@ -106,11 +106,3 @@ class GradaBeam(AdaptiveRolloutDesigner):
             "use_pbt": True,
         }
 
-    # rollout() is now AdaptiveRolloutDesigner._rollout(), but expose it as a public method
-    # so existing tests that call gb.rollout() continue to work.
-    def rollout(self, parent_nodes):
-        return self._rollout(parent_nodes)
-
-    # mutate_nodes_gradabeam alias kept for callers that used the old name.
-    def mutate_nodes_gradabeam(self, nodes, num_edit_locs, new_rates):
-        return self._mutate_gradient_nodes(nodes, num_edit_locs, new_rates)
