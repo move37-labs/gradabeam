@@ -549,3 +549,29 @@ def test_alpha_unchanged_on_gradient_free_path():
         f"_compute_child_alpha must return alpha unchanged on gradient-free node "
         f"(gradient_position_weights=None), got {result} != {initial_alpha}"
     )
+
+
+def test_unified_gradient_free_path_does_zero_backward_passes():
+    """The unified gradient-free path must never call get_tism / do a backward pass.
+
+    This guards the UNIFIED AdaptiveRolloutDesigner (use_gradients=False), not the
+    legacy standalone AdaBeam class, ensuring the cost claim holds on the production
+    code path.  Checks designer.model.n_backward (ModelWrapper counter) rather than
+    a spy on the raw model, so it catches costs charged via any route.
+    """
+    designer = AdaptiveRolloutDesigner(
+        model_fn=testing_utils.CountLetterModel(),
+        start_sequence="ACGTACGT",
+        mutations_per_sequence=2,
+        beam_size=4,
+        n_rollouts_per_root=2,
+        strategy=UniformPositionStrategy(),
+        use_gradients=False,
+        use_pbt=False,
+        eval_batch_size=1,
+        rng_seed=42,
+    )
+    designer.run(n_steps=2)
+    assert designer.model.n_backward == 0, (
+        f"Expected 0 backward passes on gradient-free path, got {designer.model.n_backward}"
+    )
