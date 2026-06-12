@@ -289,7 +289,7 @@ class AdaptiveRolloutDesigner:
     +-----------------------------+----------------+------------------------------+
     | strategy.is_legacy()        | use_gradients  | path                         |
     +-----------------------------+----------------+------------------------------+
-    | True  (allow_silent_edits)  | False (only)   | legacy / reproduction-only   |
+    | True                        | False (only)   | legacy / reproduction-only   |
     | False                       | False          | corrected gradient-free      |
     | False                       | True           | gradient-guided (GradaBeam)  |
     +-----------------------------+----------------+------------------------------+
@@ -298,13 +298,11 @@ class AdaptiveRolloutDesigner:
     ----------
     strategy : UniformPositionStrategy | GradientPositionStrategy
         Controls how candidate positions are selected at each rollout step.
+        Pass ``UniformPositionStrategy(allow_silent_edits=True)`` to enable
+        the legacy reproduction-only path.
     use_gradients : bool
         When True, compute TISM at each rollout root.
         When False, skip TISM (no tism_cost charged to ModelWrapper).
-    allow_silent_edits : bool
-        True  → legacy operator (~25% silent edits, bit-for-bit RNG match
-                 with published AdaBeam).  Must use with use_gradients=False.
-        False → corrected position-space operator (never silent).
     use_pbt : bool
         Enable Population Based Training for adaptive mutation rate and α.
     exploration_alpha : float
@@ -322,7 +320,6 @@ class AdaptiveRolloutDesigner:
         n_rollouts_per_root: int,
         strategy: UniformPositionStrategy | GradientPositionStrategy,
         use_gradients: bool,
-        allow_silent_edits: bool,
         use_pbt: bool,
         exploration_alpha: float = 0.5,
         gradient_prob_cap: float = 0.10,
@@ -367,7 +364,6 @@ class AdaptiveRolloutDesigner:
 
         self.strategy = strategy
         self.use_gradients = use_gradients
-        self.allow_silent_edits = allow_silent_edits
         self.use_pbt = use_pbt
         self.exploration_alpha = exploration_alpha
         self.gradient_prob_cap = gradient_prob_cap
@@ -1141,7 +1137,6 @@ class AdaptiveRolloutDesigner:
             "rng_seed": 42,
             "strategy": GradientPositionStrategy(),
             "use_gradients": True,
-            "allow_silent_edits": False,
             "use_pbt": True,
             "exploration_alpha": 0.5,
         }

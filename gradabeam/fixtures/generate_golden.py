@@ -22,7 +22,7 @@ Golden fixture provenance
 Fixtures committed at: pre-refactor commit 982c75a
 Oracle: CountLetterModel (count_letter), CountSubstringModel(substring="AC")
 rng_seed: 42, start_sequence: "AAAAAA", n_steps: 3, beam_size: 10
-AdaBeam config: allow_silent_edits=True (generate_random_mutant_v2, ~25% silent)
+AdaBeam config: legacy path (generate_random_mutant_v2, ~25% silent; strategy.is_legacy()==True)
 """
 
 import json
@@ -56,18 +56,11 @@ class _CapturingAdaBeam(AdaBeam):
     that the RNG consumption is IDENTICAL to the original.  The only addition
     is the ``self.trajectory.append(...)`` call after building sorted_sequences.
 
-    This subclass must always be constructed with allow_silent_edits=True.
-    The guard below ensures re-runs cannot silently capture corrected-path data.
+    AdaBeam always uses the legacy path (strategy.is_legacy()==True); the guard
+    in generate_fixture confirms this before writing any fixture file.
     """
 
     def __init__(self, *args, **kwargs):
-        # allow_silent_edits must be True or this is the wrong config for fixture generation.
-        assert kwargs.get("allow_silent_edits", False) is True, (
-            "_CapturingAdaBeam must be constructed with allow_silent_edits=True.  "
-            "The golden fixture was captured from the legacy silent operator; "
-            "using the corrected operator would overwrite the fixture with "
-            "different data and invalidate the equivalence gate."
-        )
         super().__init__(*args, **kwargs)
         self.trajectory: list[list[dict]] = []
 
@@ -117,15 +110,14 @@ class _CapturingAdaBeam(AdaBeam):
 def _verify_identical_top_beam(oracle_name, model_fn, start_seq, n_steps, rng_seed):
     """Assert that _CapturingAdaBeam top-beam equals plain AdaBeam top-beam.
 
-    Both must be constructed with allow_silent_edits=True to match the
-    legacy operator used to generate the original fixtures.
+    Both use AdaBeam's default legacy path (strategy.is_legacy()==True) to
+    match the operator used to generate the original fixtures.
     """
     kwargs = AdaBeam.debug_init_args()
     kwargs.update(
         model_fn=model_fn,
         start_sequence=start_seq,
         rng_seed=rng_seed,
-        allow_silent_edits=True,  # EXPLICIT: must match the fixture's legacy config
     )
 
     plain = AdaBeam(**kwargs)
@@ -160,29 +152,25 @@ def _verify_identical_top_beam(oracle_name, model_fn, start_seq, n_steps, rng_se
 def generate_fixture(oracle_name, model_fn, start_seq, n_steps=3, rng_seed=42):
     """Generate a single golden fixture.
 
-    ALWAYS constructs AdaBeam with allow_silent_edits=True (legacy path) so the
-    fixture is anchored to the pre-refactor operator.  The guard below will
-    refuse to run on any non-silent configuration and therefore prevent a future
-    default-flip from silently overwriting the genuine baseline.
+    AdaBeam always uses the legacy path (strategy.is_legacy()==True).  The guard
+    below confirms this so a future change to AdaBeam cannot silently overwrite
+    the genuine pre-refactor baseline with corrected-path data.
     """
     kwargs = AdaBeam.debug_init_args()
     kwargs.update(
         model_fn=model_fn,
         start_sequence=start_seq,
         rng_seed=rng_seed,
-        allow_silent_edits=True,  # EXPLICIT: legacy path required
     )
 
     opt = _CapturingAdaBeam(**kwargs)
 
     # Guard: refuse to run if the designer is not on the legacy path.
-    # This prevents a future re-run after a default change from silently
-    # capturing corrected-path data instead of the genuine legacy baseline.
     assert opt.strategy.is_legacy(), (
         "generate_fixture must run on the legacy/silent path "
-        "(allow_silent_edits=True).  The current designer is using the "
-        "corrected operator, which would produce different sequences and "
-        "overwrite the genuine pre-refactor fixture.  Pass allow_silent_edits=True."
+        "(strategy.is_legacy()==True).  AdaBeam uses UniformPositionStrategy() "
+        "by default; if this assertion fails, AdaBeam's default strategy has "
+        "changed and the fixture would capture corrected-path data instead."
     )
 
     initial_beam = [

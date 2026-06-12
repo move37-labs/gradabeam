@@ -28,7 +28,6 @@ class GradaBeam(AdaptiveRolloutDesigner):
     Delegates to AdaptiveRolloutDesigner with:
       strategy = GradientPositionStrategy()
       use_gradients = True
-      allow_silent_edits = False
       use_pbt = <from constructor>
 
     The gradient information is marginalized to position space via
@@ -86,7 +85,6 @@ class GradaBeam(AdaptiveRolloutDesigner):
             debug=debug,
             strategy=GradientPositionStrategy(),
             use_gradients=True,
-            allow_silent_edits=False,
             use_pbt=use_pbt,
             exploration_alpha=exploration_alpha,
             gradient_prob_cap=gradient_prob_cap,
