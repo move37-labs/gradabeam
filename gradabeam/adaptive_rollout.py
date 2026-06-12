@@ -738,16 +738,6 @@ class AdaptiveRolloutDesigner:
             children = self._mutate_gradient_nodes(
                 parent_nodes, num_edit_locs, new_rates
             )
-            if self.debug:
-                for _n_d, _child, _par in zip(num_edit_locs, children, parent_nodes):
-                    self._edit_count_log.append(
-                        {
-                            "n_drawn": int(_n_d),
-                            "n_changed": sum(
-                                a != b for a, b in zip(_child.seq, _par.seq)
-                            ),
-                        }
-                    )
             nodes_visited.update(children)
             cur_rollout_length += 1  # incremented AFTER generating
 

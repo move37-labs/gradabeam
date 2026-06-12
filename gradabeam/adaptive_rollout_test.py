@@ -407,7 +407,7 @@ def test_rollout_length_convention():
       rejected when passed back through the loop.  Verify the convention holds.
     """
 
-    # ── Scenario 1: deterministic exhaustion at length 1 ────────────────────
+    # ── Scenario 1: exhaustion with L=2 mutable positions, mu=0.5 ───────────
     def _always_accept(seqs):
         return np.ones(len(seqs), dtype=float)
 
@@ -423,14 +423,15 @@ def test_rollout_length_convention():
         use_gradients=False,
         use_pbt=False,
         max_rollout_len=5,
-        positions_to_mutate=[0],  # L_mutate=1 → exactly 1 edit consumed per rollout
+        positions_to_mutate=[0, 1],  # L_mutate=2, mu=0.5 → exhaustion in 1-2 steps
     )
     designer_ex1.run(n_steps=1)
     lengths1 = designer_ex1.last_rollout_lengths
     assert len(lengths1) > 0, "No rollout lengths recorded (scenario 1 exhaustion)."
-    # With L_mutate=1: step 1 makes 1 edit, step 2 finds exhaustion → length = 1.
-    assert all(length == 1 for length in lengths1), (
-        f"Scenario 1 (L=1, always-accept): expected all lengths=1, got {lengths1}.\n"
+    # With L_mutate=2: sampler draws 1 or 2 edits; exhaustion occurs in 1 or 2 steps.
+    assert all(1 <= length <= 2 for length in lengths1), (
+        f"Scenario 1 (L=2, mu=0.5, always-accept): expected all lengths in [1,2], "
+        f"got {lengths1}.\n"
         "Regression in exhaustion recording convention — check that exhaustion\n"
         "records cur_rollout_length BEFORE the (blocked) increment."
     )
