@@ -254,9 +254,7 @@ def main(argv=None):
     seq_display = (
         start_sequence if len(start_sequence) <= 60 else start_sequence[:57] + "..."
     )
-    print(
-        f"Optimizer            : {args.optimizer}"
-    )
+    print(f"Optimizer            : {args.optimizer}")
     print(f"Sequence ({len(start_sequence):,} bp)  : {seq_display}")
     print(f"Mutable positions    : {n_mutable}")
     print(f"Mutations/step       : {mutations_per_sequence:.2f}")

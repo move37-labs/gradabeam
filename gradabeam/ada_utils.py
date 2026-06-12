@@ -266,7 +266,9 @@ class NumberEditsSamplerAdaBeam(NumberEditsSampler):
         )
 
 
-def build_uniform_pos_and_chars(sequence: str, positions_to_mutate: list[int]) -> list[tuple[int, str]]:
+def build_uniform_pos_and_chars(
+    sequence: str, positions_to_mutate: list[int]
+) -> list[tuple[int, str]]:
     """Build a standard 3L actions list of (position, character) pairs.
 
     For each position in positions_to_mutate, we generate 3 non-reference actions.
@@ -319,7 +321,9 @@ def generate_random_mutant_actionspace(
     """
     assert isinstance(pos_and_chars_to_mutate, list)
     n_actions = len(pos_and_chars_to_mutate)
-    assert len(probs) == n_actions, f"Expected probs of length {n_actions}, got {len(probs)}"
+    assert len(probs) == n_actions, (
+        f"Expected probs of length {n_actions}, got {len(probs)}"
+    )
     assert n_actions % 3 == 0, "Action space size must be a multiple of 3."
     assert n_edits >= 1, f"n_edits ({n_edits}) must be >= 1"
 
@@ -346,11 +350,11 @@ def generate_random_mutant_actionspace(
     )
 
     # ── Step 3: draw bases via vectorized inverse-CDF ────────────────────────
-    chosen_rows = probs_2d[chosen_positions]           # (effective_n, 3)
+    chosen_rows = probs_2d[chosen_positions]  # (effective_n, 3)
     row_sums = np.maximum(chosen_rows.sum(axis=1, keepdims=True), 1e-30)
-    cond_probs = chosen_rows / row_sums                # (effective_n, 3)
-    cum = np.cumsum(cond_probs, axis=1)                # (effective_n, 3)
-    u = rng.random(effective_n)                        # (effective_n,)
+    cond_probs = chosen_rows / row_sums  # (effective_n, 3)
+    cum = np.cumsum(cond_probs, axis=1)  # (effective_n, 3)
+    u = rng.random(effective_n)  # (effective_n,)
     # Vectorized per-row inverse-CDF: count how many CDF entries are < u[i]
     base_offsets = np.minimum((cum < u[:, None]).sum(axis=1), 2)  # shape (effective_n,)
 
@@ -397,7 +401,9 @@ def generate_random_mutant_actionspace(
     #   positions zeroed) and in n_avail. Reading B only declines the extra
     #   WITHIN-child renormalization across this step's N draws.
     # ---------------------------------------------------------------------------
-    p_final_chosen_list = [float(current_probs[int(a)]) for a in selected_action_indices_arr]
+    p_final_chosen_list = [
+        float(current_probs[int(a)]) for a in selected_action_indices_arr
+    ]
 
     # ── Position masking on the carried probs ────────────────────────────────
     for pos_idx in chosen_positions:

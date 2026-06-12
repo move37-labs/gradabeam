@@ -105,4 +105,3 @@ class GradaBeam(AdaptiveRolloutDesigner):
             "exploration_alpha": 0.5,
             "use_pbt": True,
         }
-

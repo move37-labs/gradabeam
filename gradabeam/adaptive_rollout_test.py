@@ -22,8 +22,6 @@ import pytest
 
 from gradabeam import testing_utils
 from gradabeam import ada_utils
-from gradabeam.adabeam_designer import AdaBeam
-from gradabeam.gradabeam_designer import GradaBeam
 from gradabeam.adaptive_rollout import (
     AdaptiveRolloutDesigner,
     GradientActionStrategy,
@@ -93,9 +91,19 @@ def test_no_double_edit_per_rollout():
             )
             child = children[0]
 
-            prev_avail = {i for i, active in enumerate((current.probs > 0).reshape(-1, 3).any(axis=1)) if active}
+            prev_avail = {
+                i
+                for i, active in enumerate(
+                    (current.probs > 0).reshape(-1, 3).any(axis=1)
+                )
+                if active
+            }
             assert child.probs is not None
-            child_avail = {i for i, active in enumerate((child.probs > 0).reshape(-1, 3).any(axis=1)) if active}
+            child_avail = {
+                i
+                for i, active in enumerate((child.probs > 0).reshape(-1, 3).any(axis=1))
+                if active
+            }
             newly_edited = prev_avail - child_avail
 
             double_edits = newly_edited & edited_positions
@@ -200,7 +208,9 @@ def test_alpha_direction_sanity():
     p_unif_masked = 1.0 / n_avail_masked  # 1/9
 
     masked_grad_avail = grad_probs[:9] / grad_probs[:9].sum()
-    p_final_masked_0 = (1 - initial_alpha) * masked_grad_avail[0] + initial_alpha * p_unif_masked
+    p_final_masked_0 = (1 - initial_alpha) * masked_grad_avail[
+        0
+    ] + initial_alpha * p_unif_masked
 
     child_alpha_masked = designer._compute_child_alpha(
         node=node_masked,
@@ -221,9 +231,7 @@ def test_alpha_direction_sanity():
     )
 
     # If it had used 1/(3L)=1/18, posterior would be far smaller.
-    posterior_wrong = (
-        initial_alpha * (1.0 / 18) / (p_final_masked_0 + 1e-10)
-    )
+    posterior_wrong = initial_alpha * (1.0 / 18) / (p_final_masked_0 + 1e-10)
     assert abs(posterior_ref - posterior_wrong) > 0.01, (
         "Test is degenerate: 1/n_available == 1/(3L) for this case — "
         "use a configuration where they differ."
@@ -491,7 +499,9 @@ def test_rollout_length_convention():
             exploration_alpha=0.5,
             probs=np.ones(3 * n, dtype=np.float64) / (3 * n),
             gradient_probs=None,
-            pos_and_chars=ada_utils.build_uniform_pos_and_chars(node.seq, list(range(n))),
+            pos_and_chars=ada_utils.build_uniform_pos_and_chars(
+                node.seq, list(range(n))
+            ),
         )
         for node in designer_rej.current_nodes[:2]  # 2 roots
     ]
@@ -619,8 +629,8 @@ def test_adabeam_is_gradabeam_gradients_off():
     # enter it — both draws are 1/24, not 1/24 then 1/21. (1/21 would be the
     # within-child WOR likelihood, which we intentionally do not use; see the
     # design comment in generate_random_mutant_actionspace.)
-    assert abs(p_final_chosen_list[0] - 1/24) < 1e-9
-    assert abs(p_final_chosen_list[1] - 1/24) < 1e-9
+    assert abs(p_final_chosen_list[0] - 1 / 24) < 1e-9
+    assert abs(p_final_chosen_list[1] - 1 / 24) < 1e-9
 
 
 def test_unified_gradient_free_path_does_zero_backward_passes():
@@ -732,12 +742,14 @@ def test_positional_mask_zeroes_whole_position():
 
     for seed in range(50):
         rng = np.random.default_rng(seed)
-        _, edited_indices, remaining_probs, _ = ada_utils.generate_random_mutant_actionspace(
-            sequence=sequence,
-            pos_and_chars_to_mutate=pos_and_chars,
-            n_edits=1,
-            rng=rng,
-            probs=probs.copy(),
+        _, edited_indices, remaining_probs, _ = (
+            ada_utils.generate_random_mutant_actionspace(
+                sequence=sequence,
+                pos_and_chars_to_mutate=pos_and_chars,
+                n_edits=1,
+                rng=rng,
+                probs=probs.copy(),
+            )
         )
         assert len(edited_indices) == 1
         k = edited_indices[0]
@@ -895,5 +907,3 @@ def test_normal_run_trajectory_unchanged_by_clamp():
             assert mu < 1.0, (
                 f"mu={mu:.6f} >= 1.0 observed at step {step + 1} in normal run."
             )
-
-

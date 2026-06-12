@@ -69,9 +69,7 @@ class RolloutNodeWithProbs(ada_utils.RolloutNode):
     mutations_per_sequence: float = dataclasses.field(
         default=1.0, compare=False, hash=False
     )
-    exploration_alpha: float = dataclasses.field(
-        default=0.5, compare=False, hash=False
-    )
+    exploration_alpha: float = dataclasses.field(default=0.5, compare=False, hash=False)
     gradient_probs: np.ndarray | None = field(default=None, hash=False, compare=False)
 
     @property
@@ -302,7 +300,9 @@ class AdaptiveRolloutDesigner:
             performed against the seed_node.
         Therefore NaN cannot propagate to any comparison or tracker.
         """
-        pos_and_chars = ada_utils.build_uniform_pos_and_chars(start_sequence, self.positions_to_mutate)
+        pos_and_chars = ada_utils.build_uniform_pos_and_chars(
+            start_sequence, self.positions_to_mutate
+        )
         n_actions = len(pos_and_chars)
         init_probs = np.ones(n_actions, dtype=np.float64) / n_actions
         seed_node = RolloutNodeWithProbs(
@@ -441,9 +441,7 @@ class AdaptiveRolloutDesigner:
         for i in range(0, len(root_nodes_effective), self.eval_batch_size):
             cur_root_nodes = root_nodes_effective[i : i + self.eval_batch_size]
             # Attach fresh uniform action-space probs; no TISM.
-            parent_nodes = [
-                self._attach_uniform_probs(n) for n in cur_root_nodes
-            ]
+            parent_nodes = [self._attach_uniform_probs(n) for n in cur_root_nodes]
 
             cur_rollout_length = 0
             while len(parent_nodes) > 0 and cur_rollout_length < self.max_rollout_len:
@@ -462,11 +460,17 @@ class AdaptiveRolloutDesigner:
                     [n.mutations_per_sequence for n in parent_nodes],
                 )
                 if self.debug:
-                    for _n_d, _child, _par in zip(num_edit_locs, children, parent_nodes):
-                        self._edit_count_log.append({
-                            "n_drawn": int(_n_d),
-                            "n_changed": sum(a != b for a, b in zip(_child.seq, _par.seq)),
-                        })
+                    for _n_d, _child, _par in zip(
+                        num_edit_locs, children, parent_nodes
+                    ):
+                        self._edit_count_log.append(
+                            {
+                                "n_drawn": int(_n_d),
+                                "n_changed": sum(
+                                    a != b for a, b in zip(_child.seq, _par.seq)
+                                ),
+                            }
+                        )
                 nodes_visited.update(children)
                 cur_rollout_length += 1  # incremented AFTER generating
 
@@ -497,10 +501,16 @@ class AdaptiveRolloutDesigner:
         The action space and position budget are reset to full at the start of each
         rollout chain.
         """
-        pos_and_chars = ada_utils.build_uniform_pos_and_chars(node.seq, self.positions_to_mutate)
+        pos_and_chars = ada_utils.build_uniform_pos_and_chars(
+            node.seq, self.positions_to_mutate
+        )
         n_actions = len(pos_and_chars)
         init_probs = np.ones(n_actions, dtype=np.float64) / n_actions
-        mps = getattr(node, "mutations_per_sequence", float(self.mu * len(self.positions_to_mutate)))
+        mps = getattr(
+            node,
+            "mutations_per_sequence",
+            float(self.mu * len(self.positions_to_mutate)),
+        )
         alpha = getattr(node, "exploration_alpha", float(self.exploration_alpha))
         return RolloutNodeWithProbs(
             seq=node.seq,
@@ -663,12 +673,14 @@ class AdaptiveRolloutDesigner:
             )
 
             # Sequential action-space mutation with position-level masking
-            mutant_seq, selected_idx, masked_probs, p_final_chosen_list = ada_utils.generate_random_mutant_actionspace(
-                sequence=node.seq,
-                pos_and_chars_to_mutate=node.pos_and_chars,
-                n_edits=n_edits,
-                rng=self.rng,
-                probs=node.probs,
+            mutant_seq, selected_idx, masked_probs, p_final_chosen_list = (
+                ada_utils.generate_random_mutant_actionspace(
+                    sequence=node.seq,
+                    pos_and_chars_to_mutate=node.pos_and_chars,
+                    n_edits=n_edits,
+                    rng=self.rng,
+                    probs=node.probs,
+                )
             )
 
             seqs.append(mutant_seq)
@@ -762,7 +774,9 @@ class AdaptiveRolloutDesigner:
             gradient_probs = self._logits_to_gradient_probs(logits)
 
             # Mixed 3L probs (for action selection)
-            mixed_probs = self.mix_gradient_with_uniform(gradient_probs, node.exploration_alpha)
+            mixed_probs = self.mix_gradient_with_uniform(
+                gradient_probs, node.exploration_alpha
+            )
 
             grad_nodes.append(
                 RolloutNodeWithProbs(
@@ -811,7 +825,9 @@ class AdaptiveRolloutDesigner:
             gradient_probs = np.ones_like(gradient_probs) / len(gradient_probs)
         return gradient_probs
 
-    def mix_gradient_with_uniform(self, gradient_probs: np.ndarray, alpha: float) -> np.ndarray:
+    def mix_gradient_with_uniform(
+        self, gradient_probs: np.ndarray, alpha: float
+    ) -> np.ndarray:
         n_actions = len(gradient_probs)
         uniform_probs = np.ones(n_actions) / n_actions
         final_probs = (1.0 - alpha) * gradient_probs + alpha * uniform_probs

@@ -10,7 +10,6 @@ pytest gradabeam/ada_utils_test.py
 import numpy as np
 import pytest
 
-from gradabeam import constants
 from gradabeam import testing_utils
 from gradabeam import ada_utils
 
@@ -257,7 +256,9 @@ def test_get_tism_real_action_ordering():
 
 # Shared fixture data
 _SEQUENCE = "ACGTACGT"  # length 8
-_POS_AND_CHARS = ada_utils.build_uniform_pos_and_chars(_SEQUENCE, list(range(len(_SEQUENCE))))
+_POS_AND_CHARS = ada_utils.build_uniform_pos_and_chars(
+    _SEQUENCE, list(range(len(_SEQUENCE)))
+)
 _UNIFORM_PROBS = np.ones(len(_POS_AND_CHARS), dtype=np.float64) / len(_POS_AND_CHARS)
 
 
@@ -268,8 +269,12 @@ def test_build_uniform_pos_and_chars():
     # Pos 0 (A): non-ref are C, G, T
     # Pos 1 (C): non-ref are A, G, T
     expected = [
-        (0, "C"), (0, "G"), (0, "T"),
-        (1, "A"), (1, "G"), (1, "T"),
+        (0, "C"),
+        (0, "G"),
+        (0, "T"),
+        (1, "A"),
+        (1, "G"),
+        (1, "T"),
     ]
     assert pos_and_chars == expected
 
@@ -279,12 +284,14 @@ def test_build_uniform_pos_and_chars():
 def test_actionspace_edit_count_invariant(n_edits, seed):
     """Mutant differs from input in exactly n_edits positions."""
     rng = np.random.default_rng(seed)
-    mutant, edited_indices, remaining_probs, p_final_chosen_list = ada_utils.generate_random_mutant_actionspace(
-        sequence=_SEQUENCE,
-        pos_and_chars_to_mutate=_POS_AND_CHARS,
-        n_edits=n_edits,
-        rng=rng,
-        probs=_UNIFORM_PROBS.copy(),
+    mutant, edited_indices, remaining_probs, p_final_chosen_list = (
+        ada_utils.generate_random_mutant_actionspace(
+            sequence=_SEQUENCE,
+            pos_and_chars_to_mutate=_POS_AND_CHARS,
+            n_edits=n_edits,
+            rng=rng,
+            probs=_UNIFORM_PROBS.copy(),
+        )
     )
 
     # Exactly n_edits edits.
@@ -319,7 +326,9 @@ def test_actionspace_collision_regression():
     n_edits = 2
 
     # Put heavy mass on position 0's actions
-    pos_and_chars = ada_utils.build_uniform_pos_and_chars(sequence, list(range(len(sequence))))
+    pos_and_chars = ada_utils.build_uniform_pos_and_chars(
+        sequence, list(range(len(sequence)))
+    )
     n_actions = len(pos_and_chars)
     probs = np.zeros(n_actions, dtype=np.float64)
     # Position 0 occupies indices [0, 1, 2]
@@ -368,16 +377,20 @@ def test_actionspace_guard_n_edits_zero():
 def test_actionspace_boundary_exceeds_positions():
     """n_edits exceeding available positions gets clamped to total positions, but doesn't crash."""
     sequence = "ACGT"  # length 4
-    pos_and_chars = ada_utils.build_uniform_pos_and_chars(sequence, list(range(len(sequence))))
+    pos_and_chars = ada_utils.build_uniform_pos_and_chars(
+        sequence, list(range(len(sequence)))
+    )
     # 12 actions total across 4 positions.
     # Max positions to edit is 4.
     rng = np.random.default_rng(0)
-    mutant, edited_indices, remaining_probs, p_final_chosen_list = ada_utils.generate_random_mutant_actionspace(
-        sequence=sequence,
-        pos_and_chars_to_mutate=pos_and_chars,
-        n_edits=5,  # Exceeds total positions (4)
-        rng=rng,
-        probs=np.ones(12) / 12,
+    mutant, edited_indices, remaining_probs, p_final_chosen_list = (
+        ada_utils.generate_random_mutant_actionspace(
+            sequence=sequence,
+            pos_and_chars_to_mutate=pos_and_chars,
+            n_edits=5,  # Exceeds total positions (4)
+            rng=rng,
+            probs=np.ones(12) / 12,
+        )
     )
     # It should be clamped to 4 edits (one per position)
     actual_diffs = [i for i, (a, b) in enumerate(zip(sequence, mutant)) if a != b]
@@ -414,7 +427,9 @@ def test_actionspace_guard_allzero_probs():
 def test_actionspace_weights_bias_selection():
     """Verify weights bias action selection."""
     sequence = "ACGTACGT"  # length 8
-    pos_and_chars = ada_utils.build_uniform_pos_and_chars(sequence, list(range(len(sequence))))
+    pos_and_chars = ada_utils.build_uniform_pos_and_chars(
+        sequence, list(range(len(sequence)))
+    )
     # Let's put 80% weight on action 5 (position 1, base 'T' or similar) and spread the rest
     hot_idx = 5
     probs = np.ones(len(pos_and_chars), dtype=np.float64)
@@ -457,12 +472,14 @@ def test_pfinal_equals_step_start_action_probability():
     generate_random_mutant_actionspace for the rationale.
     """
     sequence = "AAAA"
-    pos_and_chars = ada_utils.build_uniform_pos_and_chars(sequence, [0, 1, 2, 3])  # 12 actions
+    pos_and_chars = ada_utils.build_uniform_pos_and_chars(
+        sequence, [0, 1, 2, 3]
+    )  # 12 actions
     # Non-uniform probs so the factorial reconstruction != probs[action] in the interior.
-    probs = np.array([0.30, 0.02, 0.02,
-                      0.05, 0.05, 0.05,
-                      0.10, 0.01, 0.04,
-                      0.10, 0.10, 0.16], dtype=np.float64)
+    probs = np.array(
+        [0.30, 0.02, 0.02, 0.05, 0.05, 0.05, 0.10, 0.01, 0.04, 0.10, 0.10, 0.16],
+        dtype=np.float64,
+    )
     probs /= probs.sum()
 
     rng = np.random.default_rng(0)
@@ -474,8 +491,11 @@ def test_pfinal_equals_step_start_action_probability():
         probs=probs.copy(),
     )
 
-    expected = [probs[a] for a in sel_idx]   # step-start policy prob; NO renormalization
+    expected = [probs[a] for a in sel_idx]  # step-start policy prob; NO renormalization
     np.testing.assert_allclose(
-        p_final, expected, rtol=1e-9, atol=0,
+        p_final,
+        expected,
+        rtol=1e-9,
+        atol=0,
         err_msg="p_final is not the step-start action probability probs[action].",
     )

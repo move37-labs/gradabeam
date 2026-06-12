@@ -41,4 +41,3 @@ class CountLetterModel(torch.nn.Module, TISMModelClass):
 
     def __call__(self, x):
         return self.inference_on_strings(x)
-
