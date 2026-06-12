@@ -10,7 +10,6 @@ pytest gradabeam/ada_utils_test.py
 import numpy as np
 import pytest
 
-from gradabeam import constants
 from gradabeam import testing_utils
 from gradabeam import ada_utils
 

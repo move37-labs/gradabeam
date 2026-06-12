@@ -72,9 +72,7 @@ class RolloutNodeWithProbs(ada_utils.RolloutNode):
     mutations_per_sequence: float = dataclasses.field(
         default=1.0, compare=False, hash=False
     )
-    exploration_alpha: float = dataclasses.field(
-        default=0.5, compare=False, hash=False
-    )
+    exploration_alpha: float = dataclasses.field(default=0.5, compare=False, hash=False)
     # ── position-space fields ───────────────────────────────────────────────
     position_weights: np.ndarray | None = field(default=None, hash=False, compare=False)
     gradient_position_weights: np.ndarray | None = field(
@@ -608,11 +606,17 @@ class AdaptiveRolloutDesigner:
                     [n.mutations_per_sequence for n in parent_nodes],
                 )
                 if self.debug:
-                    for _n_d, _child, _par in zip(num_edit_locs, children, parent_nodes):
-                        self._edit_count_log.append({
-                            "n_drawn": int(_n_d),
-                            "n_changed": sum(a != b for a, b in zip(_child.seq, _par.seq)),
-                        })
+                    for _n_d, _child, _par in zip(
+                        num_edit_locs, children, parent_nodes
+                    ):
+                        self._edit_count_log.append(
+                            {
+                                "n_drawn": int(_n_d),
+                                "n_changed": sum(
+                                    a != b for a, b in zip(_child.seq, _par.seq)
+                                ),
+                            }
+                        )
                 nodes_visited.update(children)
                 cur_rollout_length += 1  # incremented AFTER generating
 
@@ -736,10 +740,14 @@ class AdaptiveRolloutDesigner:
             )
             if self.debug:
                 for _n_d, _child, _par in zip(num_edit_locs, children, parent_nodes):
-                    self._edit_count_log.append({
-                        "n_drawn": int(_n_d),
-                        "n_changed": sum(a != b for a, b in zip(_child.seq, _par.seq)),
-                    })
+                    self._edit_count_log.append(
+                        {
+                            "n_drawn": int(_n_d),
+                            "n_changed": sum(
+                                a != b for a, b in zip(_child.seq, _par.seq)
+                            ),
+                        }
+                    )
             nodes_visited.update(children)
             cur_rollout_length += 1  # incremented AFTER generating
 

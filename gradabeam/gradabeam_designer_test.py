@@ -83,7 +83,6 @@ def test_gradabeam_eval_batch_size_sanity(eval_batch_size):
     # Add correctness checks.
 
 
-
 def test_gradabeam_eval_batch_size_consistency():
     """Test that `eval_batch_size` is consistent."""
     model_fn = testing_utils.CountLetterModel()
