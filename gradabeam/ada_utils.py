@@ -1,6 +1,7 @@
 """Common utilities for [Gr]Ada*."""
 
 import dataclasses
+from collections import OrderedDict
 
 import numpy as np
 from scipy.stats import binom
@@ -8,7 +9,7 @@ import torch
 import xxhash
 
 from typing import Any, Callable
-from gradabeam import opt_utils
+from gradabeam import constants
 
 
 PositionsAndCharactersType = list[tuple[int, str]]
@@ -49,9 +50,11 @@ class ModelWrapper:
             )
         self.model = model
         self.cost: float = 0
+        self.n_forward: int = 0
+        self.n_backward: int = 0
         self.use_cache = use_cache
         self.cache_limit = cache_limit
-        self.cache: dict[int, float] = {}
+        self.cache: OrderedDict[int, float] = OrderedDict()
         self.debug = debug
         self.tism_cost = tism_cost
 
@@ -86,28 +89,18 @@ class ModelWrapper:
             torch_opt_fn = torch.inference_mode
         self.torch_opt_fn: Any = torch_opt_fn
 
-    def str_in_cache(self, seq: str) -> bool:
-        """Check if a sequence is in the cache."""
-        k = xxhash.xxh64(seq).intdigest()
-        return k in self.cache
-
     def get_fitness(self, m_input: list) -> list[float]:
         self.cost += len(m_input)
 
         if self.use_cache:
-            # SAFETY VALVE: Prevent infinite growth for long runs
-            if len(self.cache) > self.cache_limit:
-                if self.debug:
-                    print("Cache limit reached. Flushing.")
-                self.cache = {}
-
             # 1) Sift sequences into seen and unseen, keeping track of their location
             # so we can preserve order.
-            # 2) Pull from the has the fitness of the seen sequences.
+            # 2) Pull from the cache of the fitness of the seen sequences.
             seen_fitness, unseen_seq, unseen_hash = [], [], []
             for i, seq in enumerate(m_input):
                 k = xxhash.xxh64(seq).intdigest()
                 if k in self.cache:
+                    self.cache.move_to_end(k)  # mark as recently used
                     seen_fitness.append((i, self.cache[k]))
                 else:
                     unseen_seq.append((i, seq))
@@ -126,12 +119,19 @@ class ModelWrapper:
             # so we use the fastest we can.
             with self.torch_opt_fn():
                 results = self.model(m_input)
+            self.n_forward += len(m_input)
 
         if self.use_cache:
-            # 3) Add the unseen sequences to the cache.
+            # 3) Add the unseen sequences to the cache with LRU eviction.
             # 4) Interleave seen and unseen results to preserve order.
             for k, v in zip(unseen_hash, results):
                 self.cache[k] = v
+                if len(self.cache) > self.cache_limit:
+                    evicted_key, _ = self.cache.popitem(last=False)
+                    if self.debug:
+                        print(
+                            f"Cache limit reached. Evicting oldest entry ({evicted_key})."
+                        )
             unseen_fitness = [(i, r) for (i, _), r in zip(unseen_seq, results)]
             results = [x[1] for x in sorted(seen_fitness + unseen_fitness)]
 
@@ -154,6 +154,8 @@ class ModelWrapper:
         if self.tism_cost < 1.0:
             raise ValueError("Cost must be >= 1.0.")
         self.cost += self.tism_cost
+        self.n_forward += 1
+        self.n_backward += 1
 
         # Use fast tensor-based TISM
         pos_and_chars_to_mutate, logits = self.model.get_tism(sequence, idxs)
@@ -165,6 +167,12 @@ class ModelWrapper:
 
 def _F_inverse(mu: float, seq_len: int) -> float:
     """F_inverse = 1 - (1-mu')^l"""
+    if mu >= 1.0:
+        raise ValueError(
+            f"_F_inverse requires mu < 1.0 (got mu={mu!r}). "
+            "Check that mutations_per_sequence < len(positions_to_mutate) "
+            "and that the PBT rate clamp is active."
+        )
     return -np.expm1(seq_len * np.log1p(-mu))
 
 
@@ -258,45 +266,6 @@ class NumberEditsSamplerAdaBeam(NumberEditsSampler):
         )
 
 
-def generate_random_mutant_v2(
-    sequence: str,
-    positions_to_mutate: list[int],
-    random_n_loc: int,
-    alphabet: str,
-    rng: np.random.Generator,
-) -> str:
-    """
-    Generate a mutant of `sequence` with exactly `random_n_loc` edits.
-
-    Args:
-        sequence: Sequence that will be mutated from.
-        positions_to_mutate: Allowed positions to be mutated.
-        random_n_loc: Number of mutations per sequence.
-        alphabet: Alphabet string.
-        rng: Random number generator.
-
-    Returns:
-        Mutant sequence string.
-
-    """
-    assert isinstance(alphabet, str)
-
-    locations_to_edit = opt_utils.get_locations_to_edit(
-        positions_to_mutate=positions_to_mutate,
-        random_n_loc=random_n_loc,
-        rng=rng,
-        method="random",
-    )
-    assert len(locations_to_edit) == random_n_loc
-
-    return opt_utils.generate_single_mutant_multiedits(
-        base_str=sequence,
-        locs_to_edit=locations_to_edit,
-        alphabet=list(alphabet),
-        rng=rng,
-    )
-
-
 def generate_random_mutant_tism(
     sequence: str,
     pos_and_chars_to_mutate: PositionsAndCharactersType,
@@ -339,6 +308,112 @@ def generate_random_mutant_tism(
             i
         )  # Use relative position, which is needed downstream.
     return "".join(mutant), rel_pos_of_mutations
+
+
+def tism_probs_to_position_weights(
+    probs_3L: np.ndarray,
+    n_positions: int,
+) -> np.ndarray:
+    """Marginalize a 3L TISM action-value vector to a per-position weight vector.
+
+    Action-ordering assumption (verified in tism.TISMModelClass.get_tism):
+      Before the reference-base mask, the flat layout is positions-major with vocab
+      tiled: [(p0,A),(p0,C),(p0,G),(p0,T), (p1,A),...].  The mask removes exactly
+      one entry per position (the reference base), leaving the three non-reference
+      actions for position i in the contiguous slice [3i : 3i+3] of the masked
+      output.  Therefore reshape(-1, 3).sum(axis=1) correctly recovers the sum of
+      each position's three action entries.
+
+    Args:
+        probs_3L: 1-D array of length 3 * n_positions containing nonnegative
+            values.  No normalization is required or applied; the function returns
+            the raw per-position sums of each position's three action entries.
+            Pass a softmax-normalized vector to obtain P(position i is touched)
+            under the current distribution; pass raw logits or counts for other
+            uses.
+        n_positions: number of mutable positions (L).
+
+    Returns:
+        1-D array of length n_positions containing the sum of the three action
+        entries for each position.
+    """
+    assert len(probs_3L) == 3 * n_positions, (
+        f"Expected len(probs_3L) == 3 * n_positions = {3 * n_positions}, "
+        f"got {len(probs_3L)}."
+    )
+    return probs_3L.reshape(n_positions, 3).sum(axis=1)
+
+
+def generate_random_mutant_positionspace(
+    sequence: str,
+    mutable_positions: list[int],
+    position_weights: np.ndarray,
+    n_edits: int,
+    rng: np.random.Generator,
+) -> tuple[str, list[int]]:
+    """Generate a mutant with exactly n_edits distinct edits in position space.
+
+    Unlike generate_random_mutant_tism (which samples in the 3L action space and
+    can collide when two selected actions share a position), this function samples
+    n_edits distinct positions first, then picks the new base uniformly from the
+    3 non-reference bases.  This guarantees exactly n_edits distinct edits.
+
+    Args:
+        sequence: Reference sequence to mutate.
+        mutable_positions: Absolute (0-based) positions that may be edited.
+        position_weights: Non-negative weight for each mutable position (same
+            length as mutable_positions).  Need not be normalized; normalized
+            internally.
+        n_edits: Number of distinct positions to edit.  Must satisfy
+            1 <= n_edits <= len(mutable_positions).  Callers must handle the
+            no-positions-left case (n_edits == 0) before calling; this function
+            never silently returns an unedited sequence.
+        rng: NumPy random Generator.
+
+    Returns:
+        (mutant_string, edited_positions) where edited_positions is the list of
+        absolute (0-based) positions that were changed, in the order they were
+        selected.
+    """
+    # Fix 4: convert to float64 array once; run all weight asserts on the array.
+    weights = np.asarray(position_weights, dtype=np.float64)
+
+    # Fix 2: enforce lower bound before upper bound.
+    assert n_edits >= 1, (
+        "n_edits must be >= 1; callers must handle the no-positions-left case "
+        "before calling."
+    )
+    assert n_edits <= len(mutable_positions), (
+        f"n_edits ({n_edits}) must be <= len(mutable_positions) "
+        f"({len(mutable_positions)})."
+    )
+    assert len(weights) == len(mutable_positions), (
+        f"position_weights length ({len(weights)}) must equal "
+        f"len(mutable_positions) ({len(mutable_positions)})."
+    )
+    assert np.all(weights >= 0), "All position_weights must be nonnegative."
+    assert np.any(weights > 0), "At least one position_weight must be > 0."
+
+    weights = weights / weights.sum()
+
+    chosen_positions = rng.choice(
+        np.asarray(mutable_positions, dtype=np.int64),
+        size=n_edits,
+        replace=False,
+        p=weights,
+    )
+
+    # Build the set of 3 non-reference bases once per chosen position.
+    all_bases = constants.VOCAB  # ["A", "C", "G", "T"]
+    mutant = list(sequence)
+    for pos in chosen_positions:
+        ref_base = sequence[int(pos)]
+        alt_bases = [b for b in all_bases if b != ref_base]
+        # Fix 3: str() ensures a plain Python str, not a numpy str scalar.
+        new_base = str(rng.choice(alt_bases))
+        mutant[int(pos)] = new_base
+
+    return "".join(mutant), [int(p) for p in chosen_positions]
 
 
 def get_batched_fitness(

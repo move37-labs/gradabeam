@@ -2,7 +2,7 @@
 
 import numpy as np
 import torch
-from gradabeam.seq_utils import dna2tensor, dna2tensor_integer
+from gradabeam.seq_utils import dna2tensor
 
 
 def apply_gradient_mask(
@@ -71,11 +71,6 @@ class TISMModelClass:
     def str2tensor(self, x: str) -> torch.Tensor:
         assert hasattr(self, "vocab"), "Vocab not set."
         return dna2tensor(x, vocab_list=self.vocab)
-
-    def tensor2int(self, x: torch.Tensor) -> torch.Tensor:
-        return dna2tensor_integer(
-            self.vocab_array[x.argmax(dim=0)].tolist(), vocab_list=self.vocab
-        )
 
     def tism_torch(self, x: str, idxs: list[int] | None = None) -> torch.Tensor:
         input_tensor = self.str2tensor(x)

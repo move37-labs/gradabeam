@@ -1,5 +1,5 @@
-from gradabeam.gradabeam_optimizer import GradaBeam
-from gradabeam.adabeam_optimizer import AdaBeam
+from gradabeam.gradabeam_designer import GradaBeam
+from gradabeam.adabeam_designer import AdaBeam
 
 
 __all__ = ["GradaBeam", "AdaBeam"]
