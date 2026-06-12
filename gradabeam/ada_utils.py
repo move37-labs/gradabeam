@@ -10,7 +10,6 @@ import xxhash
 
 from typing import Any, Callable
 from gradabeam import constants
-from gradabeam import opt_utils
 
 
 PositionsAndCharactersType = list[tuple[int, str]]
