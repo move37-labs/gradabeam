@@ -1,4 +1,4 @@
-"""Tests for beam_designer.py — Plan 01 part 1b.
+"""Tests for beam_designer.py.
 
 Tests
 -----
@@ -23,11 +23,7 @@ To run:
     pytest gradabeam/adaptive_rollout_test.py
 """
 
-import os
-import sys
-
 import numpy as np
-import pytest
 
 from gradabeam import testing_utils
 from gradabeam.adaptive_rollout import (
@@ -51,13 +47,7 @@ def test_no_double_edit_per_rollout():
 
     Uses start_sequence="AAAA" (L=4) with chain_depth=6 > L so position
     exhaustion IS reachable in this test.  The rollout must terminate cleanly
-    (zero-vector path) rather than silently resetting to uniform — the old
-    reset would re-enable edited positions and trigger the double-edit assertion.
-
-    This test would FAIL under the old code (uniform-reset fallback) because
-    after 4 edits all positions are exhausted, the reset would make all 4
-    available again, and the 5th step could re-edit a position that was already
-    changed.
+    (zero-vector path) rather than silently resetting to uniform.
     """
     model = testing_utils.CountLetterModel()
     start_seq = "AAAA"  # L=4; exhaustion reachable within chain_depth=6
@@ -261,12 +251,6 @@ def test_no_silent_edits_corrected_path():
     The designer uses use_gradients=False with the corrected (non-legacy) strategy,
     which routes to _propose_sequences_positionspace (corrected AdaBeam path).
 
-    BEFORE the routing fix (Plan 01 part 1b rev), this config was silently
-    routed to the legacy path (which used the legacy v2 operator
-    with ~25% silent edits).  The test assertions were also tautological
-    (checked `cand_base != ref_base` inside `if ref_base != cand_base`, which
-    is always True).  Both bugs are now fixed.
-
     We test via _mutate_gradient_nodes with a known parent so we can count
     EXACT diffs and verify no silent edit occurred.
     """
@@ -349,7 +333,7 @@ def test_no_silent_edits_corrected_path():
 
 
 # ---------------------------------------------------------------------------
-# Bug 2: NaN seed fitness must not propagate to the initial beam
+# NaN seed fitness must not propagate to the initial beam
 # ---------------------------------------------------------------------------
 
 
@@ -389,7 +373,7 @@ def test_positionspace_init_beam_has_no_nan_fitness():
 
 
 # ---------------------------------------------------------------------------
-# Bug 3: rollout-length convention — hand-traced toy scenarios
+# Rollout-length convention — hand-traced toy scenarios
 # ---------------------------------------------------------------------------
 
 
@@ -521,7 +505,7 @@ def test_rollout_length_convention():
 
 
 def test_alpha_unchanged_on_gradient_free_path():
-    """Bug 1: α must pass through unchanged on the gradient-free path.
+    """α must pass through unchanged on the gradient-free path.
 
     On the corrected gradient-free path (gradient_position_weights=None),
     there is no gradient signal so _compute_child_alpha must return the input α

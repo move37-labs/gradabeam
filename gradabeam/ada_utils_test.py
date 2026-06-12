@@ -198,8 +198,7 @@ def test_get_tism_real_action_ordering():
          implementation and the derived expectation in lockstep but would still
          fail this test.
 
-    If either 2 or 3 fails, stop — the marginalizer is wrong and Plan 01 part
-    1b is blocked.
+    If either 2 or 3 fails, the marginalizer is wrong.
     """
     model_fn = testing_utils.CountLetterModel(target_char="A")
     model = ada_utils.ModelWrapper(model_fn, tism_cost=1.0)
@@ -475,7 +474,7 @@ def test_collision_regression():
     n_collisions = sum(1 for c in tism_distinct_counts if c < n_edits)
     assert n_collisions > 0, (
         f"generate_random_mutant_tism never produced a collision across {n_seeds} seeds. "
-        "The collision-bug premise is wrong — stop and rethink Plan 01."
+        "The collision-bug premise is wrong — the TISM sampler never collided."
     )
 
     # --- regression guard: observed collision rate ≈ analytical expectation ---
@@ -483,8 +482,7 @@ def test_collision_regression():
     assert abs(observed_collision_rate - expected_collision_rate) < collision_atol, (
         f"Observed collision rate {observed_collision_rate:.3f} is not within "
         f"±{collision_atol} of the analytically expected {expected_collision_rate:.3f}. "
-        "A near-zero value means the collision bug has been fixed in the old operator "
-        "(re-evaluate Plan 01 scope); a value far above expected is an RNG anomaly."
+        "A near-zero value means the TISM sampler's collision behavior has changed; a value far above expected is an RNG anomaly."
     )
 
     # --- passes-new check: position-space sampler always produces exact edits ---
@@ -555,8 +553,8 @@ def test_real_get_tism_through_marginalizer():
     """End-to-end composition: real get_tism output → tism_probs_to_position_weights.
 
     The ordering test and the round-trip test are never composed; the exact path
-    that Plan 01 integration runs (real get_tism → normalize logits → marginalize
-    to position weights) has no test.  This test closes that gap.
+    (real get_tism → normalize logits → marginalize to position weights) has no
+    other test.  This test closes that gap.
 
     Crucially, the expected per-position weight is computed by GROUPING the real
     pos_and_chars by their position value — not by assuming a layout.  If the

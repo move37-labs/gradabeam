@@ -6,9 +6,6 @@ continue to work without modification.
 
 from typing import Any
 
-import numpy as np
-
-from gradabeam import ada_utils
 from gradabeam import testing_utils
 from gradabeam.adaptive_rollout import AdaptiveRolloutDesigner, UniformPositionStrategy
 

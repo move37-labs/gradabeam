@@ -1,16 +1,10 @@
-"""GradaBeam — thin constructor over AdaptiveRolloutDesigner.
+"""GradaBeam -- thin constructor over AdaptiveRolloutDesigner.
 
-Public constructor signature is unchanged; existing callers and the CLI
-continue to work without modification.
-
-Changes vs. the previous implementation (Plan 01 §3-4):
-  * Mutation is now in position space (generate_random_mutant_positionspace).
-  * Masking is in position space: after editing position j, zero it in the
-    L-vector and renormalize — "don't edit the same position twice per rollout"
-    now actually holds.
-  * α-posterior: p_uniform = 1/n_available_positions (not 1/3L);
-    P_final recomputed explicitly at each step as the (1-α)·grad + α·unif
-    mixture over available positions.
+Mutation is in position space (generate_random_mutant_positionspace).
+Masking zeros edited positions in the L-vector and renormalizes, preventing
+double-edits within a rollout.  alpha-posterior uses
+p_uniform = 1/n_available_positions; P_final is recomputed at each step as
+the (1-alpha) * grad + alpha * unif mixture over available positions.
 """
 
 from typing import Any
@@ -104,12 +98,3 @@ class GradaBeam(AdaptiveRolloutDesigner):
             "exploration_alpha": 0.5,
             "use_pbt": True,
         }
-
-    # rollout() is now AdaptiveRolloutDesigner._rollout(), but expose it as a public method
-    # so existing tests that call gb.rollout() continue to work.
-    def rollout(self, parent_nodes):
-        return self._rollout(parent_nodes)
-
-    # mutate_nodes_gradabeam alias kept for callers that used the old name.
-    def mutate_nodes_gradabeam(self, nodes, num_edit_locs, new_rates):
-        return self._mutate_gradient_nodes(nodes, num_edit_locs, new_rates)

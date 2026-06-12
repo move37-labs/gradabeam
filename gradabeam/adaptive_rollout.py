@@ -1,14 +1,16 @@
 """AdaptiveRolloutDesigner — unified designer with injected mutation strategy.
 
-Root-step equivalence property
--------------------------------
-Before any position is masked, the position-marginal of the old action-level
-mixture  (1-α)·grad_action + α·unif_action  equals the new position-level
-mixture  (1-α)·masked_grad + α·unif_w  — because summing a (position,base)
-action distribution over bases is linear and the uniform base-draw post-hoc is
-equivalent to the uniform term in the original action mixture.  So root-step
-position-selection behavior is UNCHANGED from the old code; the only intended
-divergence is the (previously buggy) multi-step masking.
+Position-level vs. action-level mixing
+---------------------------------------
+Sampling operates in position space: the final position distribution is the
+mixture  (1-α)·masked_grad + α·unif_w,  where masked_grad is the gradient
+position weights with already-edited positions zeroed out and renormalized, and
+unif_w is uniform over those same available positions.  This is equivalent to
+the action-level mixture  (1-α)·grad_action + α·unif_action  at the root step
+(before any masking), because marginalizing a (position, base) distribution
+over bases is linear.  After the first edit, masking breaks the action-level
+equivalence, so subsequent steps work entirely in position space to correctly
+exclude consumed positions from future draws.
 """
 
 from __future__ import annotations
@@ -41,10 +43,9 @@ class RolloutNodeWithProbs(ada_utils.RolloutNode):
     Field notes
     -----------
     probs : np.ndarray or None
-        3L mixed action-probability vector (kept for backward compatibility with
-        tests that inspect the gradient-action distribution).
+        3L mixed action-probability vector from the gradient path.
     pos_and_chars : list[tuple[int, str]] or None
-        (position, character) pairs from the TISM call — kept for compat.
+        (position, character) pairs from the TISM call.
     edits_since_root : int or None
         Depth in the current rollout chain, starting at 0 for roots.
     mutations_per_sequence : float
@@ -161,7 +162,7 @@ class UniformPositionStrategy:
 
 
 class GradientPositionStrategy:
-    """Gradient-guided position weights (Plan 01 §2).
+    """Gradient-guided position weights.
 
     Marginalizes the 3L TISM distribution to a per-position weight via
     ``tism_probs_to_position_weights``, then mixes with uniform:
@@ -277,7 +278,7 @@ class AdaptiveRolloutDesigner:
     exploration_alpha : float
         Initial mixing coefficient (0=pure gradient, 1=pure uniform).
     skip_repeat_sequences : bool
-        Legacy AdaBeam option: retry mutation until a novel sequence is found.
+        Retry mutation until a novel sequence is found.
     """
 
     def __init__(
@@ -442,7 +443,7 @@ class AdaptiveRolloutDesigner:
     ) -> None:
         """Corrected gradient-free initial beam (uniform position weights).
 
-        Bug 2 (NaN fitness) analysis: seed_node carries fitness=np.float32(nan).  This NaN is safe:
+        NaN fitness safety: seed_node carries fitness=np.float32(nan).  This NaN is safe:
           * _mutate_gradient_nodes only reads node.seq, node.position_weights,
             node.exploration_alpha, and node.edits_since_root from the seed;
             children receive their fitness from get_batched_fitness(), not from
@@ -515,8 +516,8 @@ class AdaptiveRolloutDesigner:
     def _propose_sequences_positionspace(self, root_nodes: list) -> list:
         """Corrected gradient-free rollout using position-space operator.
 
-        This is the scientific comparison point for Plan 01: "corrected AdaBeam"
-        ≡ GradaBeam with gradients off + uniform weights.  No TISM is computed.
+        "corrected AdaBeam" = GradaBeam with gradients off + uniform weights.
+        No TISM is computed.
         Positions are selected uniformly from those not yet edited in the current
         rollout chain.  Rollout chains terminate when all positions are exhausted.
 
@@ -640,7 +641,7 @@ class AdaptiveRolloutDesigner:
     ) -> tuple[set[RolloutNodeWithProbs], list[int]]:
         """Run one rollout chain and return visited nodes and per-chain lengths.
 
-        Rollout-length convention (Bug 3):
+        Rollout-length convention:
           rollout_length = number of mutations generated in the chain, where
           "generated" means the oracle was called for that child.
 
@@ -771,12 +772,11 @@ class AdaptiveRolloutDesigner:
             new_pw_list.append(new_pw)
             effective_edits.append(len(chosen_positions))
 
-            # α-posterior update (Plan 01 §4 option a).
+            # α-posterior update.
             # NOTE: this update runs PRE-FITNESS — α reflects which positions
             # were selected, not whether the selection improved fitness.  It is
             # a selection-based signal that tracks how much the gradient steered
-            # the choice versus pure uniform sampling.  Plan 02b's gradient-gate
-            # must account for this when interpreting the α trajectory.
+            # the choice versus pure uniform sampling.
             child_alpha = self._compute_child_alpha(
                 node=node,
                 chosen_positions=chosen_positions,
@@ -815,14 +815,13 @@ class AdaptiveRolloutDesigner:
         chosen_positions: list[int],
         p_final_chosen: np.ndarray | None,
     ) -> float:
-        """Compute the α-posterior for the child node (Plan 01 §4 option a).
+        """Compute the α-posterior for the child node.
 
         α is updated PRE-FITNESS based on which positions were selected.
-        See the comment in _mutate_gradient_nodes for Plan 02b implications.
 
         When use_pbt=False, alpha passes through unchanged.
 
-        Bug 1 guard: when gradient_position_weights is None (corrected
+        Guard: when gradient_position_weights is None (corrected
         gradient-free path), there is no gradient signal to compare against and
         the Bayesian update reduces to a no-op (posterior ≈ α everywhere).
         Rather than performing a meaningless update, we always pass through α
@@ -886,7 +885,7 @@ class AdaptiveRolloutDesigner:
             )
             assert len(pos_and_chars) == len(logits)
 
-            # Mixed 3L probs (kept for backward compat with existing tests)
+            # Mixed 3L probs used by gradient-action tests
             mixed_probs = self.logits_to_probs(logits, node.exploration_alpha)
 
             # Pure-gradient position weights (for position-space masking)
