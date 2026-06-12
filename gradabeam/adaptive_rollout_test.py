@@ -2,18 +2,6 @@
 
 Tests
 -----
-test_adabeam_equivalence_count_letter
-test_adabeam_equivalence_substring_count
-    Gate: AdaptiveRolloutDesigner(UniformPositionStrategy(allow_silent_edits=True),
-          use_gradients=False, use_pbt=False) reproduces the frozen golden
-          trajectory bit-for-bit on both oracles.
-
-test_equivalence_gate_is_not_vacuous
-    Mutation test: confirms the golden fixture was captured from the REAL
-    AdaBeam operator (generate_random_mutant_v2), not from the corrected
-    position-space operator.  The corrected operator produces a DIFFERENT
-    trajectory under the same seed — proving the gate is not self-comparison.
-
 test_no_double_edit_per_rollout
     Across a full rollout chain, no position is ever edited twice.
     Uses a short sequence (L=4) with chain_depth > L so position exhaustion
@@ -26,8 +14,8 @@ test_alpha_direction_sanity
     (not 1/(3L) or 1/L).
 
 test_no_silent_edits_corrected_path
-    With allow_silent_edits=False, every proposed child differs from its
-    immediate parent in exactly N positions and no mutation is a no-op.
+    Every proposed child differs from its immediate parent in exactly N positions
+    and no mutation is a no-op.
     Routes through AdaptiveRolloutDesigner with use_gradients=False (corrected AdaBeam
     path), NOT the gradient path — verifying the new routing is correct.
 
@@ -35,7 +23,6 @@ To run:
     pytest gradabeam/adaptive_rollout_test.py
 """
 
-import json
 import os
 import sys
 
@@ -53,176 +40,6 @@ from gradabeam.adaptive_rollout import (
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
-
-_FIXTURE_DIR = os.path.join(os.path.dirname(__file__), "fixtures")
-
-
-def _load_fixture(filename: str) -> dict:
-    path = os.path.join(_FIXTURE_DIR, filename)
-    with open(path) as fh:
-        return json.load(fh)
-
-
-def _step_proposals(
-    designer: AdaptiveRolloutDesigner, n_steps: int
-) -> list[list[dict]]:
-    """Run n_steps one at a time; collect last_all_proposals after each step."""
-    trajectory = []
-    for _ in range(n_steps):
-        designer.run(n_steps=1)
-        trajectory.append(list(designer.last_all_proposals))
-    return trajectory
-
-
-def _make_legacy_designer(oracle_name: str, fixture: dict) -> AdaptiveRolloutDesigner:
-    """Build an AdaptiveRolloutDesigner with the exact same config used to generate the fixture.
-
-    Golden fixtures were captured from pre-refactor AdaBeam at commit 982c75a
-    (committed before any Plan-01-1b refactor source existed).  The config is
-    the LEGACY path (allow_silent_edits=True, generate_random_mutant_v2) — this
-    must be set EXPLICITLY here so that a future default change in AdaBeam cannot
-    silently make this test compare the fixture against the wrong operator.
-    """
-    if oracle_name == "CountLetterModel":
-        model_fn = testing_utils.CountLetterModel()
-    elif oracle_name == "CountSubstringModel":
-        _repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        _oracles_dir = os.path.join(_repo_root, "oracles")
-        if _oracles_dir not in sys.path:
-            sys.path.insert(0, _oracles_dir)
-        from substring_count import CountSubstringModel  # type: ignore
-
-        model_fn = CountSubstringModel(substring="AC")
-    else:
-        raise ValueError(f"Unknown oracle: {oracle_name}")
-
-    designer = AdaptiveRolloutDesigner(
-        model_fn=model_fn,
-        start_sequence=fixture["start_sequence"],
-        mutations_per_sequence=fixture["mutations_per_sequence"],
-        beam_size=fixture["beam_size"],
-        n_rollouts_per_root=fixture["n_rollouts_per_root"],
-        eval_batch_size=1,
-        rng_seed=fixture["rng_seed"],
-        # EXPLICIT legacy config — matches pre-refactor commit 982c75a exactly.
-        # Must never be changed to allow_silent_edits=False without regenerating
-        # the golden fixture from a new pre-refactor anchor.
-        strategy=UniformPositionStrategy(allow_silent_edits=True),
-        use_gradients=False,
-        use_pbt=False,
-        skip_repeat_sequences=False,
-    )
-    # Guard: ensure we really are on the legacy path, independent of future defaults.
-    assert designer.strategy.is_legacy(), (
-        "_make_legacy_designer must produce a legacy-path designer.  "
-        "The golden fixtures (commit 982c75a) were captured with the silent "
-        "operator — using the corrected operator would fail bit-for-bit comparison."
-    )
-    return designer
-
-
-# ---------------------------------------------------------------------------
-# Gate test: bit-for-bit equivalence with the frozen golden baseline
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.parametrize(
-    "fixture_file,oracle_name",
-    [
-        ("adabeam_golden_count_letter.json", "CountLetterModel"),
-        ("adabeam_golden_substring_count.json", "CountSubstringModel"),
-    ],
-)
-def test_adabeam_equivalence(fixture_file, oracle_name):
-    """AdaptiveRolloutDesigner (legacy config) must reproduce the frozen golden trajectory.
-
-    This is the Plan 01 acceptance gate.  A failure here means either:
-      (a) the unified designer's legacy path diverged from AdaBeam's RNG, OR
-      (b) someone modified source BEFORE running the fixture generator.
-
-    If this test is failing, do NOT weaken it to a distributional check — that
-    would destroy its regression value.  Investigate the RNG discrepancy instead.
-    """
-    fixture = _load_fixture(fixture_file)
-    designer = _make_legacy_designer(oracle_name, fixture)
-
-    # ── initial beam ────────────────────────────────────────────────────────
-    initial_got = sorted((n.seq, float(n.fitness)) for n in designer.current_nodes)
-    initial_expected = sorted((d["seq"], d["fitness"]) for d in fixture["initial_beam"])
-    assert initial_got == initial_expected, (
-        f"{oracle_name}: initial beam mismatch.\n"
-        f"  expected first 3: {initial_expected[:3]}\n"
-        f"  got      first 3: {initial_got[:3]}"
-    )
-
-    # ── per-step proposals ──────────────────────────────────────────────────
-    trajectory = _step_proposals(designer, fixture["n_steps"])
-
-    for step_idx, (got_step, expected_step) in enumerate(
-        zip(trajectory, fixture["steps"])
-    ):
-        got_sorted = sorted((d["seq"], d["fitness"]) for d in got_step)
-        exp_sorted = sorted((d["seq"], d["fitness"]) for d in expected_step)
-
-        assert got_sorted == exp_sorted, (
-            f"{oracle_name} step {step_idx}: all-proposals mismatch.\n"
-            f"  expected {len(exp_sorted)} proposals, got {len(got_sorted)}.\n"
-            f"  first 3 expected: {exp_sorted[:3]}\n"
-            f"  first 3 got:      {got_sorted[:3]}"
-        )
-
-
-# ---------------------------------------------------------------------------
-# Mutation test: equivalence gate is NOT vacuous
-# ---------------------------------------------------------------------------
-
-
-def test_equivalence_gate_is_not_vacuous():
-    """The golden fixture was captured from real AdaBeam, not the corrected operator.
-
-    We run the CORRECTED gradient-free AdaptiveRolloutDesigner (corrected path,
-    same seed) and confirm its step-0 proposals differ from the golden fixture.
-    Because the fixture was generated by the legacy operator
-    (generate_random_mutant_v2, 4-base sampling) and the corrected operator
-    (generate_random_mutant_positionspace, non-ref sampling) consumes the RNG
-    stream differently, they MUST produce different sequences — proving the
-    gate is not comparing identical code paths to themselves.
-
-    If this test fails (both operators produce the same proposals), the fixture
-    is not genuine AdaBeam output and test_adabeam_equivalence has no value.
-    """
-    fixture = _load_fixture("adabeam_golden_count_letter.json")
-
-    # Corrected gradient-free path: same seed, different operator.
-    corrected_designer = AdaptiveRolloutDesigner(
-        model_fn=testing_utils.CountLetterModel(),
-        start_sequence=fixture["start_sequence"],
-        mutations_per_sequence=fixture["mutations_per_sequence"],
-        beam_size=fixture["beam_size"],
-        n_rollouts_per_root=fixture["n_rollouts_per_root"],
-        eval_batch_size=1,
-        rng_seed=fixture["rng_seed"],
-        strategy=UniformPositionStrategy(
-            allow_silent_edits=False
-        ),  # DIFFERENT operator
-        use_gradients=False,
-        use_pbt=False,
-        skip_repeat_sequences=False,
-    )
-
-    corrected_designer.run(n_steps=1)
-    corrected_proposals = set(
-        (d["seq"], d["fitness"]) for d in corrected_designer.last_all_proposals
-    )
-    expected_step0 = set((d["seq"], d["fitness"]) for d in fixture["steps"][0])
-
-    assert corrected_proposals != expected_step0, (
-        "Gate is VACUOUS: the corrected position-space operator produced the "
-        "same step-0 proposals as the golden fixture.  The fixture may not "
-        "have been captured from real AdaBeam (generate_random_mutant_v2) — "
-        "the two operators must produce different RNG streams under the same seed."
-    )
-
 
 # ---------------------------------------------------------------------------
 # No-double-edit-per-rollout — exercises exhaustion
@@ -445,8 +262,8 @@ def test_no_silent_edits_corrected_path():
     which routes to _propose_sequences_positionspace (corrected AdaBeam path).
 
     BEFORE the routing fix (Plan 01 part 1b rev), this config was silently
-    routed to _propose_sequences_legacy, which used generate_random_mutant_v2
-    (with ~25% silent edits).  The test assertions were also tautological
+    routed to the legacy path (which used the legacy v2 operator
+    with ~25% silent edits).  The test assertions were also tautological
     (checked `cand_base != ref_base` inside `if ref_base != cand_base`, which
     is always True).  Both bugs are now fixed.
 
@@ -465,17 +282,14 @@ def test_no_silent_edits_corrected_path():
         n_rollouts_per_root=4,
         eval_batch_size=1,
         rng_seed=77,
-        strategy=UniformPositionStrategy(allow_silent_edits=False),
+        strategy=UniformPositionStrategy(),
         use_gradients=False,  # gradient-free, NOT the gradient path
         use_pbt=False,
         max_rollout_len=1,
     )
 
     # Verify routing: propose_sequences must call _propose_sequences_positionspace
-    # (not _propose_sequences_legacy, not _propose_sequences_gradient).
-    assert not designer.strategy.is_legacy(), (
-        "strategy.is_legacy() must be False for the corrected path."
-    )
+    # (not _propose_sequences_gradient).
     assert not designer.use_gradients, (
         "use_gradients must be False for the corrected gradient-free path."
     )
@@ -526,7 +340,7 @@ def test_no_silent_edits_corrected_path():
         n_rollouts_per_root=2,
         eval_batch_size=1,
         rng_seed=99,
-        strategy=UniformPositionStrategy(allow_silent_edits=False),
+        strategy=UniformPositionStrategy(),
         use_gradients=False,
         use_pbt=False,
     )
@@ -555,7 +369,7 @@ def test_positionspace_init_beam_has_no_nan_fitness():
         n_rollouts_per_root=2,
         eval_batch_size=1,
         rng_seed=7,
-        strategy=UniformPositionStrategy(allow_silent_edits=False),
+        strategy=UniformPositionStrategy(),
         use_gradients=False,
         use_pbt=False,
     )
@@ -621,7 +435,7 @@ def test_rollout_length_convention():
         n_rollouts_per_root=2,
         eval_batch_size=1,
         rng_seed=0,
-        strategy=UniformPositionStrategy(allow_silent_edits=False),
+        strategy=UniformPositionStrategy(),
         use_gradients=False,
         use_pbt=False,
         max_rollout_len=5,
@@ -646,7 +460,7 @@ def test_rollout_length_convention():
         n_rollouts_per_root=3,
         eval_batch_size=1,
         rng_seed=7,
-        strategy=UniformPositionStrategy(allow_silent_edits=False),
+        strategy=UniformPositionStrategy(),
         use_gradients=False,
         use_pbt=False,
         max_rollout_len=10,
@@ -675,7 +489,7 @@ def test_rollout_length_convention():
         n_rollouts_per_root=2,
         eval_batch_size=1,
         rng_seed=0,
-        strategy=UniformPositionStrategy(allow_silent_edits=False),
+        strategy=UniformPositionStrategy(),
         use_gradients=False,
         use_pbt=False,
         max_rollout_len=5,
@@ -726,7 +540,7 @@ def test_alpha_unchanged_on_gradient_free_path():
         n_rollouts_per_root=1,
         eval_batch_size=1,
         rng_seed=0,
-        strategy=UniformPositionStrategy(allow_silent_edits=False),
+        strategy=UniformPositionStrategy(),
         use_gradients=False,
         use_pbt=True,  # PBT enabled, but gradient-free → α must stay constant
         exploration_alpha=initial_alpha,

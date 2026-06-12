@@ -80,23 +80,3 @@ class AdaBeam(AdaptiveRolloutDesigner):
             "skip_repeat_sequences": False,
             "rng_seed": 42,
         }
-
-    # generate_mutations kept for any external callers that relied on it
-    def generate_mutations(self, sequence: str, random_n_locs: int) -> str:
-        """Convenience wrapper around generate_random_mutant_v2."""
-        return ada_utils.generate_random_mutant_v2(
-            sequence=sequence,
-            positions_to_mutate=self.positions_to_mutate,
-            random_n_loc=random_n_locs,
-            alphabet=self.alphabet,
-            rng=self.rng,
-        )
-
-    def mutate_nodes(
-        self,
-        nodes: list,
-        num_edit_locs: list | np.ndarray,
-        max_num_tries: int = 300,
-    ) -> list:
-        """Public alias kept for external callers (delegates to _mutate_legacy_nodes)."""
-        return self._mutate_legacy_nodes(nodes, num_edit_locs, max_num_tries)

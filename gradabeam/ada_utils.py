@@ -266,45 +266,6 @@ class NumberEditsSamplerAdaBeam(NumberEditsSampler):
         )
 
 
-def generate_random_mutant_v2(
-    sequence: str,
-    positions_to_mutate: list[int],
-    random_n_loc: int,
-    alphabet: str,
-    rng: np.random.Generator,
-) -> str:
-    """
-    Generate a mutant of `sequence` with exactly `random_n_loc` edits.
-
-    Args:
-        sequence: Sequence that will be mutated from.
-        positions_to_mutate: Allowed positions to be mutated.
-        random_n_loc: Number of mutations per sequence.
-        alphabet: Alphabet string.
-        rng: Random number generator.
-
-    Returns:
-        Mutant sequence string.
-
-    """
-    assert isinstance(alphabet, str)
-
-    locations_to_edit = opt_utils.get_locations_to_edit(
-        positions_to_mutate=positions_to_mutate,
-        random_n_loc=random_n_loc,
-        rng=rng,
-        method="random",
-    )
-    assert len(locations_to_edit) == random_n_loc
-
-    return opt_utils.generate_single_mutant_multiedits(
-        base_str=sequence,
-        locs_to_edit=locations_to_edit,
-        alphabet=list(alphabet),
-        rng=rng,
-    )
-
-
 def generate_random_mutant_tism(
     sequence: str,
     pos_and_chars_to_mutate: PositionsAndCharactersType,
