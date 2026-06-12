@@ -392,12 +392,9 @@ class AdaptiveRolloutDesigner:
         print("=" * 62)
 
     def get_samples(self, n_samples: int) -> list[str]:
-        def _get_key(node: Any) -> Any:
-            try:
-                return node.sort_key
-            except AttributeError:
-                return (node.fitness, node.seq)
-        sorted_nodes = sorted(self.current_nodes, key=_get_key, reverse=True)
+        sorted_nodes = sorted(
+            self.current_nodes, key=lambda x: (x.fitness, x.seq), reverse=True
+        )
         return [x.seq for x in sorted_nodes[:n_samples]]
 
     def get_batched_fitness(self, sequences: list[str]) -> np.ndarray:

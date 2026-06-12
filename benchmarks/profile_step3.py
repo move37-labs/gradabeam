@@ -41,7 +41,6 @@ _ADABEAM_KWARGS = dict(
     beam_size=BEAM_SIZE,
     mutations_per_sequence=1.0,
     n_rollouts_per_root=N_ROLLOUTS,
-    skip_repeat_sequences=False,
     eval_batch_size=1,
     rng_seed=5,
 )

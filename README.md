@@ -91,7 +91,6 @@ optimizer = AdaBeam(
     beam_size=10,
     n_rollouts_per_root=4,
     eval_batch_size=1,
-    skip_repeat_sequences=True,
 )
 
 optimizer.run(n_steps=20)
@@ -205,7 +204,6 @@ The easiest way to satisfy this is to inherit from `gradabeam.tism.TISMModelClas
 | `use_pbt` | GradaBeam | Enable Population Based Training for an adaptive mutation rate. |
 | `gradient_prob_cap` | GradaBeam | Per-action probability cap applied after softmax. |
 | `max_logit` | GradaBeam | Dynamic temperature ceiling for TISM logit scaling. |
-| `skip_repeat_sequences` | AdaBeam | Skip already-evaluated sequences during rollouts. |
 
 ## Development
 

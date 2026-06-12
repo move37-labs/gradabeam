@@ -7,6 +7,7 @@ pytest gradabeam/gradabeam_designer_test.py
 """
 
 import numpy as np
+import pytest
 
 from gradabeam import testing_utils
 
@@ -65,6 +66,21 @@ def test_gradabeam_positions_to_mutate():
         for seq in out_seqs:
             for s in seq[20:]:
                 assert s == "A", seq
+
+
+@pytest.mark.skip(reason="Disable multi-batch for now.")
+@pytest.mark.parametrize("eval_batch_size", [1, 2, 4])
+def test_gradabeam_eval_batch_size_sanity(eval_batch_size):
+    """Test that `eval_batch_size` works."""
+    kwargs = GradaBeam.debug_init_args()
+    kwargs["eval_batch_size"] = eval_batch_size
+    gradabeam = GradaBeam(**kwargs)
+
+    gradabeam.run(n_steps=2)
+
+    # TODO(joelshor):
+    # Add correctness checks.
+
 
 
 def test_gradabeam_eval_batch_size_consistency():

@@ -17,10 +17,6 @@ To run:
     pytest gradabeam/adaptive_rollout_test.py
 """
 
-import json
-import os
-import sys
-
 import numpy as np
 import pytest
 
@@ -38,26 +34,6 @@ from gradabeam.adaptive_rollout import (
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
-
-_FIXTURE_DIR = os.path.join(os.path.dirname(__file__), "fixtures")
-
-
-def _load_fixture(filename: str) -> dict:
-    path = os.path.join(_FIXTURE_DIR, filename)
-    with open(path) as fh:
-        return json.load(fh)
-
-
-def _step_proposals(
-    designer: AdaptiveRolloutDesigner, n_steps: int
-) -> list[list[dict]]:
-    """Run n_steps one at a time; collect last_all_proposals after each step."""
-    trajectory = []
-    for _ in range(n_steps):
-        designer.run(n_steps=1)
-        trajectory.append(list(designer.last_all_proposals))
-    return trajectory
-
 
 # ---------------------------------------------------------------------------
 # No-double-edit-per-rollout — exercises exhaustion
