@@ -277,8 +277,6 @@ class AdaptiveRolloutDesigner:
         Enable Population Based Training for adaptive mutation rate and α.
     exploration_alpha : float
         Initial mixing coefficient (0=pure gradient, 1=pure uniform).
-    skip_repeat_sequences : bool
-        Retry mutation until a novel sequence is found.
     """
 
     def __init__(
@@ -299,7 +297,6 @@ class AdaptiveRolloutDesigner:
         eval_batch_size: int = 1,
         max_rollout_len: int = 200,
         debug: bool = False,
-        skip_repeat_sequences: bool = False,
     ) -> None:
         self.positions_to_mutate: list[int] = positions_to_mutate or list(
             range(len(start_sequence))
@@ -331,7 +328,6 @@ class AdaptiveRolloutDesigner:
         self.exploration_alpha = exploration_alpha
         self.gradient_prob_cap = gradient_prob_cap
         self.max_logit = max_logit
-        self.skip_repeat_sequences = skip_repeat_sequences
 
         self.model = ada_utils.ModelWrapper(
             model_fn,

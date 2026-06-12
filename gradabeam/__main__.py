@@ -225,18 +225,6 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Enable Population Based Training for adaptive mutation rate. Required for gradabeam.",
     )
 
-    # ------------------------------------------------------------------ #
-    # AdaBeam-only args                                                    #
-    # ------------------------------------------------------------------ #
-    ab = p.add_argument_group("AdaBeam-only options (ignored for gradabeam)")
-    ab.add_argument(
-        "--skip_repeat_sequences",
-        type=argparse_lib.str_to_bool,
-        default=None,
-        metavar="BOOL",
-        help="Skip sequences already evaluated during rollouts. [default: False]",
-    )
-
     return p
 
 
@@ -316,9 +304,6 @@ def main(argv=None):
     elif args.optimizer == "adabeam":
         optimizer = AdaBeam(
             **shared_kwargs,
-            skip_repeat_sequences=args.skip_repeat_sequences
-            if args.skip_repeat_sequences is not None
-            else False,
         )
     else:
         parser.error(f"Unknown optimizer: {args.optimizer}")
