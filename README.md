@@ -17,8 +17,8 @@ This package provides two sequence optimizers for designing biomolecular sequenc
 
 | Optimizer | Gradient-guided | PBT | File |
 |-----------|:--------------:|:---:|------|
-| **GradaBeam** | Yes | Optional | `gradabeam/gradabeam_optimizer.py` |
-| **AdaBeam** | No (random) | No | `gradabeam/adabeam_optimizer.py` |
+| **GradaBeam** | Yes | Optional | `gradabeam/gradabeam_designer.py` |
+| **AdaBeam** | No (random) | No | `gradabeam/adabeam_designer.py` |
 
 Both use adaptive beam search with rollouts. Each round, the beam (a set of candidate sequences) is expanded by rolling out random or gradient-guided mutations, and the top-scoring candidates are kept.
 
