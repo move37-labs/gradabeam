@@ -8,13 +8,6 @@ pointed to a specific source directory to benchmark different git refs.
 import sys
 import os
 
-import argparse
-import json
-import time
-
-from gradabeam import GradaBeam, AdaBeam
-from bpnet import BPNet
-
 # Inspect sys.argv for --source-dir before any other imports
 source_dir = None
 for i, arg in enumerate(sys.argv):
@@ -32,6 +25,13 @@ else:
     sys.path.insert(0, repo_root)
     sys.path.insert(1, os.path.join(repo_root, "oracles"))
 
+import argparse
+import json
+import time
+
+from gradabeam import GradaBeam, AdaBeam
+from bpnet import BPNet
+
 
 def get_median(lst: list[float]) -> float:
     """Calculate the median of a list of floats in pure Python."""
@@ -47,6 +47,7 @@ def get_median(lst: list[float]) -> float:
 
 def measure(
     designer_name: str,
+    protein: str = "GATA2",
     n_repeats: int = 5,
     warmup_steps: int = 20,
     steps_per_repeat: int = 200,
@@ -56,7 +57,7 @@ def measure(
     Runs warmup_steps first, then executes n_repeats runs of steps_per_repeat steps.
     """
     start_seq = "A" * 3000
-    model = BPNet(protein="GATA2")
+    model = BPNet(protein=protein)
 
     adabeam_kwargs = dict(
         model_fn=model,
@@ -154,11 +155,18 @@ def main():
         default=None,
         help="Optional source directory to run against.",
     )
+    parser.add_argument(
+        "--protein",
+        type=str,
+        default="GATA2",
+        help="Protein to use for BPNet.",
+    )
 
     args = parser.parse_args()
 
     results = measure(
         designer_name=args.designer,
+        protein=args.protein,
         n_repeats=args.n_repeats,
         warmup_steps=args.warmup_steps,
         steps_per_repeat=args.steps_per_repeat,
