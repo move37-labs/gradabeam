@@ -224,6 +224,53 @@ Or with coverage:
 pytest --cov=gradabeam gradabeam/
 ```
 
+### Performance regression testing
+
+A self-comparison harness detects step-throughput regressions by benchmarking
+both the current `HEAD` and a baseline Git ref **on the same machine**, then
+failing if either designer is more than 1.20× slower than the baseline.
+
+**Run locally** (against the merge-base of your current branch and `main`):
+
+```bash
+python benchmarks/perf_regression.py --designer both
+```
+
+Key flags:
+
+| Flag | Default | Description |
+|---|---|---|
+| `--designer` | `both` | `gradabeam`, `adabeam`, or `both` |
+| `--baseline-ref` | *(merge-base)* | Explicit Git ref to compare against |
+| `--base-branch` | `main` | Branch used to compute the merge-base |
+| `--n-repeats` | `5` | Measured repeats per side (after warmup) |
+| `--steps-per-repeat` | `200` | Optimizer steps per repeat |
+| `--max-slowdown` | `1.20` | Ratio threshold that triggers a failure |
+| `--json-out` | *(none)* | Write full results to a JSON file |
+
+**In CI** the workflow `.github/workflows/perf-regression.yml` runs on every
+pull request targeting `main`. It runs `gradabeam` and `adabeam` as parallel
+jobs (~4 min wall-clock) and uploads the JSON results as artifacts.
+
+**`git bisect` recipe** — useful for finding the exact commit that introduced a
+regression. Copy the script outside the tree first so it survives checkout:
+
+```bash
+cp benchmarks/perf_regression.py /tmp/perf_regression.py
+
+# Mark the known-good and known-bad commits, then let bisect run the driver.
+# The driver exits 0 (good) when performance is within tolerance,
+# and exits 1 (bad) when a regression is detected.
+git bisect start
+git bisect bad HEAD
+git bisect good <last-known-good-sha>
+git bisect run python /tmp/perf_regression.py \
+    --designer both \
+    --baseline-ref <last-known-good-sha> \
+    --n-repeats 3 \
+    --steps-per-repeat 50
+```
+
 ## Citation
 
 If you use GrAdaBeam, please cite:
