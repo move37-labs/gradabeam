@@ -32,4 +32,4 @@ jobs:
 
       - name: Run Mypy
         shell: micromamba-shell {0}
-        run: mypy gradabeam/
+        run: mypy gradabeam/ benchmarks/

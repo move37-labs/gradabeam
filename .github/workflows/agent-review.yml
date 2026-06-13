@@ -1,0 +1,143 @@
+name: Gemini PR review
+ 
+on:
+  # Fires when a pull request targeting main is opened, reopened, or synchronized
+  pull_request:
+    branches: [ "main" ]
+    types: [opened, reopened, synchronize]
+
+  # Manual re-review: comment "@gemini-cli /review" on any PR.
+  issue_comment:
+    types: [created]
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    if: |
+      (github.event_name == 'pull_request') ||
+      (github.event_name == 'issue_comment' &&
+       github.event.issue.pull_request != null &&
+       contains(fromJSON('["OWNER", "COLLABORATOR", "MEMBER"]'), github.event.comment.author_association) &&
+       contains(github.event.comment.body, '@gemini'))
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+    strategy:
+      fail-fast: false
+      matrix:
+        persona:
+          - key: algorithm
+            name: "Optimization Algorithm & Math"
+            model: gemini-2.5-pro
+            instructions: |
+              You are a senior computational biology and search algorithms reviewer. You specialize in mathematical optimization and search heuristics.
+
+              Focus your review on the core search/optimization algorithms and statistical correctness. Focus files: `gradabeam/gradabeam_optimizer.py`, `gradabeam/adabeam_optimizer.py`, `gradabeam/ada_utils.py`.
+
+              Things to verify:
+              - **Minimize vs Maximize Convention** — The optimizers strictly *minimize* the oracle output (lower is better). In `ModelWrapper.get_fitness()`, fitness is returned as `-float(x)` to flip the sign (since Ada* is formulated to maximize internally but the public-facing API minimizes). Ensure any modifications to fitness/scores or optimization logic respect this exact convention.
+              - **Beam & Rollout Semantics** — Verify rollout logic in `rollout()` and sequence proposing in `propose_sequences()`. Ensure `child.fitness >= comparison_node.fitness` is used correctly to decide rollout continuation, and that candidate pruning respects the `beam_size` limit (sorting and slicing `[:self.beam_size]`).
+              - **PBT Mutation Rate Adaptation (Direct Snap)** — When Population Based Training (`use_pbt=True`) is enabled, verify the mutation rate adaptation. The number of edits `n_edits` is sampled using the current rate, then the child's new rate `new_rate` is directly "snapped" to the observed count (`float(max(1.0, n_edits))`).
+              - **PBT Exploration Alpha Update** — The child's exploration alpha posterior calculation must follow `avg_posterior = np.mean((node.exploration_alpha * p_uniform) / (P_final_values + 1e-10))`. Ensure the child's alpha is clipped via `np.clip(..., 0.01, 0.99)`.
+              - **AdaBeam Edit-Count Model (`num_edits_likelihood_adabeam`)** — Ensure the binomial edit-count likelihood normalizes with `F_inverse` (`1 - (1-mu)^l`), which must be implemented numerically via `np.expm1` and `np.log1p` to prevent floating-point underflow/overflow. It must explicitly force probability at `k=0` to be `0.0`.
+              - **Logits to Probabilities Math (`logits_to_probs`)** — Ensure the softmax standard-deviation normalization handles low-std edge cases (`std_dev < 1e-9` returns uniform probabilities), scales logits with the dynamic temperature `max(1.0, np.max(scaled_logits) / max_logit)`, applies the `gradient_prob_cap` limit, and mixes in the uniform exploration alpha correctly.
+              - **Determinism and Seeding** — Ensure all random actions use the generator `self.rng` (passed from `rng_seed`) rather than global `np.random` or Python's `random`. Check that `sort_key` on rollout nodes provides a total ordering (including byte-serialized probs as final fallback) for deterministic, hash-seed-independent sorting. Round the mutation rate to 4 decimal places before sampler retrieval to ensure proper LRU cache hits.
+
+              Explicitly DO NOT comment on: PyTorch tensor/autograd internals, GPU/CPU transfers, model loading/saving, CLI parsing, packaging structure, or generic docstring style.
+          - key: numerics
+            name: "PyTorch & Numerics"
+            model: gemini-2.5-pro
+            instructions: |
+              You are a senior numerical computing and PyTorch performance engineer. You specialize in automatic differentiation, vectorization, and execution performance.
+
+              Focus your review on PyTorch autograd correctness, sequence-to-tensor encoding, caching, performance optimizations, and index vectorization. Focus files: `gradabeam/tism.py`, `gradabeam/seq_utils.py`, `gradabeam/ada_utils.py` (specifically `ModelWrapper`), `benchmarks/perf_benchmark.py`.
+
+              Things to verify:
+              - **TISM Autograd and Gradient Masking** — Verify correct tensor detach and gradient attachment in `apply_gradient_mask()` and `grad_torch()`. Ensure `x_grad.requires_grad_(True)` is set, `y.sum().backward()` is called, and `grads = x_grad.grad.detach().cpu()` is retrieved safely. Ensure model parameters have `requires_grad = False` set inside `ModelWrapper` for fast backward passes when computing TISM gradients. Ensure the model is in eval mode (`model.eval()`).
+              - **TISM Logits & Reference Zeroing** — Verify that `grad_torch_to_tism_torch()` correctly zeros out reference positions: `tism_tensor[base_seq, torch.arange(seq_len)] = 0.0`, and subtracts reference values. In `ModelWrapper.get_tism()`, logits are multiplied by `-1` (`logits *= -1`) to flip the sign and match the minimizing convention.
+              - **Dtype, Device, and CPU Guards** — Verify that GPU/CPU tensor boundary logic is safe. Rollout fitness must use `np.float32`. TISM tensor extraction must handle device-to-host transfers (e.g. `tism_tensor.cpu().numpy()` when device is GPU) to avoid device mismatches or PyTorch-to-NumPy errors.
+              - **One-Hot Encoding** — Ensure sequence-to-tensor operations in `seq_utils.py` map correctly to `dna2tensor_integer` and `dna2tensor` using `F.one_hot` and proper permutation of batch dimensions.
+              - **Cache Correctness and Order Preservation** — In `ModelWrapper.get_fitness()`, ensure we use xxhash64 integer digests (`xxhash.xxh64(seq).intdigest()`) for fast caching. It must preserve order by sifting seen and unseen sequences, calling the underlying model on unseen sequences in batch, and interleaving results correctly. Ensure the safety valve flushing cache is present (`len(self.cache) > self.cache_limit`).
+              - **Vectorized Index Math** — In `get_tism()` and `generate_random_mutant_tism()`, verify that index expansion and replication are highly vectorized (`np.repeat`, `np.tile`, `np.arange`) rather than using Python loops, to maintain optimal execution speeds. Ensure `rng.choice` operates on pre-generated integer index arrays instead of tuples.
+              - **Step-Throughput Regressions** — Watch for any changes that introduce slow Python iteration inside deep rollout loops or introduce extra model execution calls.
+
+              Explicitly DO NOT comment on: Optimizer search algorithms/heuristics, PBT statistical formulas, CLI parsing, package structure, or style nits.
+          - key: package
+            name: "Package, CLI & CI Hygiene"
+            model: gemini-2.5-flash
+            instructions: |
+              You are a senior Python library maintainer and developer experience expert. You specialize in library API design, CLI robustness, testing, linting, and package health.
+
+              Focus your review on public Python APIs, CLI flags, configuration files, README correctness, Ruff lint/formatting rules, Mypy type-checking, and pytest suites. Focus files: `gradabeam/__init__.py`, `gradabeam/__main__.py`, `pyproject.toml`, `README.md`, `oracles/`, `tests/` or files ending in `_test.py`, `.github/workflows/`.
+
+              Things to verify:
+              - **Public API and Namespace Control** — Verify that `gradabeam/__init__.py` exposes only `GradaBeam` and `AdaBeam` via `__all__` to keep the library namespace clean.
+              - **CLI Flag Plumbing and Defaults** — In `gradabeam/__main__.py`, verify that all command-line arguments are properly parsed and handled. Ensure that `--use_pbt` is strictly required when the optimizer is `gradabeam`. Check that `--n_steps` and `--time_budget` are strictly mutually exclusive. Verify default values of optimizer parameters match documented behavior.
+              - **Oracle Interface Contract** — Custom oracles must define `make_oracle(unknown_args=None)` which returns a callable (minimizing the score). Ensure that unknown CLI arguments are properly forwarded to the oracle or raise a clear error if not supported.
+              - **Testing Correctness** — Every new feature or fix must have matching tests in files ending with `_test.py` (located in `gradabeam/`). Ensure tests use `pytest` and follow the codebase conventions.
+              - **Linting, Formatting & Typing Strictness** — Adhere strictly to Ruff lint and format standards (CI runs `ruff check` and `ruff format --check`). Check that type annotations match mypy strictness (`tool.mypy` settings).
+              - **README Accuracy** — Ensure any changes to parameters, CLI flags, or installation/usage instructions are reflected accurately in `README.md` without drift.
+
+              Explicitly DO NOT comment on: Core mathematical algorithms/heuristics, PBT sampling formulas, or PyTorch autograd internals. Focus on package structure, public contracts, and CI.
+    steps:
+      - uses: actions/checkout@v6
+ 
+      # Find the PR to review and write its diff and metadata to files
+      # that Gemini can read.
+      - name: Get PR details
+        id: pr
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            PR_NUMBER="${{ github.event.pull_request.number }}"
+          else
+            PR_NUMBER="${{ github.event.issue.number }}"
+          fi
+
+          if [ -z "$PR_NUMBER" ] || [ "$PR_NUMBER" = "null" ]; then
+            echo "Could not find a PR to review. Exiting."
+            exit 1
+          fi
+
+          echo "number=$PR_NUMBER" >> $GITHUB_OUTPUT
+          gh pr diff "$PR_NUMBER" > pr_diff.txt
+          gh pr view "$PR_NUMBER" --json number,title,body > pr_info.json
+ 
+      # Pre-authenticate gh using a credential file rather than an env var.
+      # Gemini CLI redacts env vars whose names contain TOKEN/KEY/SECRET, so
+      # passing GH_TOKEN directly to the Gemini step would mean gh fails inside
+      # Gemini's shell. Storing credentials via `gh auth login` sidesteps this.
+      - name: Authenticate gh for Gemini
+        run: echo "${{ github.token }}" | gh auth login --with-token
+ 
+      - uses: google-github-actions/run-gemini-cli@v0
+        env:
+          GEMINI_CLI_TRUST_WORKSPACE: "true"
+        with:
+          gemini_api_key: ${{ secrets.GEMINI_API_KEY }}
+          gemini_model: ${{ matrix.persona.model }}
+          prompt: |
+            ${{ matrix.persona.instructions }}
+
+            You are reviewing PR #${{ steps.pr.outputs.number }} on GrAdaBeam — a gradient-guided adaptive beam search optimizer with Population Based Training (PBT) for nucleic acid sequence design. This library unifies evolutionary search with model-level gradients (TISM) and adaptively scales mutation parameters.
+
+            Start by reading these three files:
+            1. pr_diff.txt — the full git diff of the PR
+            2. pr_info.json — the PR title and description (which explains the issue or feature being addressed)
+            3. README.md — project overview, usage instructions, parameters, and guidelines
+
+            Write a review from the perspective above that covers:
+            - Correctness within your focus area: does the change actually address the issue described in pr_info.json, without introducing regressions?
+            - Adherence to the project guidelines in README.md and to the specific landmines listed above
+            - Tests: were tests added or updated where appropriate?
+            - Edge cases or risks: anything that could break in production, cause numerical instability, or violate mathematical/statistical assumptions?
+            - Overall recommendation from your perspective: Approve / Request changes / Needs discussion
+
+            Be concise and specific. Reference exact file names and line numbers. If the PR has nothing in your focus area, say so in one or two sentences rather than padding the review with generic comments.
+
+            When the review is written, post it as a comment by running:
+            gh pr comment ${{ steps.pr.outputs.number }} --body "## ${{ matrix.persona.name }} Review
+
+            <your full review here>"

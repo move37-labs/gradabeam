@@ -1,0 +1,60 @@
+name: Performance Regression
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  perf-regression:
+    runs-on: ubuntu-latest
+    # Run both designers in parallel; keep both results visible even if one fails.
+    strategy:
+      fail-fast: false
+      matrix:
+        designer: [gradabeam, adabeam]
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v6
+        with:
+          # Full history is required for git merge-base and git worktree.
+          fetch-depth: 0
+
+      - name: Setup Micromamba
+        uses: mamba-org/setup-micromamba@v3
+        with:
+          environment-file: environment.yml
+          create-args: >-
+            python=3.11
+          cache-environment: true
+          post-cleanup: 'all'
+
+      - name: Install package
+        shell: micromamba-shell {0}
+        run: pip install -e .[dev,examples]
+
+      - name: Cache BPNet models
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/gradabeam/bpnet
+          key: bpnet-models-${{ hashFiles('oracles/bpnet.py') }}
+          restore-keys: |
+            bpnet-models-
+
+      - name: Run performance regression test
+        shell: micromamba-shell {0}
+        run: |
+          python benchmarks/perf_regression.py \
+            --designer ${{ matrix.designer }} \
+            --base-branch ${{ github.base_ref || 'main' }} \
+            --n-repeats 5 \
+            --max-slowdown 1.20 \
+            --json-out perf-${{ matrix.designer }}.json
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: perf-results-${{ matrix.designer }}
+          path: perf-${{ matrix.designer }}.json
