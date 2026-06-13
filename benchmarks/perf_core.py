@@ -8,6 +8,13 @@ pointed to a specific source directory to benchmark different git refs.
 import sys
 import os
 
+import argparse
+import json
+import time
+
+from gradabeam import GradaBeam, AdaBeam
+from bpnet import BPNet
+
 # Inspect sys.argv for --source-dir before any other imports
 source_dir = None
 for i, arg in enumerate(sys.argv):
@@ -24,13 +31,6 @@ else:
     repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
     sys.path.insert(0, repo_root)
     sys.path.insert(1, os.path.join(repo_root, "oracles"))
-
-import argparse
-import json
-import time
-
-from gradabeam import GradaBeam, AdaBeam
-from bpnet import BPNet
 
 
 def get_median(lst: list[float]) -> float:
