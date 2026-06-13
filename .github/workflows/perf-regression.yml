@@ -34,6 +34,14 @@ jobs:
         shell: micromamba-shell {0}
         run: pip install -e .[dev,examples]
 
+      - name: Cache BPNet models
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/gradabeam/bpnet
+          key: bpnet-models-${{ hashFiles('oracles/bpnet.py') }}
+          restore-keys: |
+            bpnet-models-
+
       - name: Run performance regression test
         shell: micromamba-shell {0}
         run: |
