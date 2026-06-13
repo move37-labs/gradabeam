@@ -13,9 +13,10 @@ import json
 import time
 from typing import Any
 
-from gradabeam import GradaBeam, AdaBeam
-
-# Inspect sys.argv for --source-dir before any other imports
+# Inspect sys.argv for --source-dir before any other imports so that the
+# correct source tree is on sys.path before gradabeam is imported.  If the
+# import happened first, Python would cache the active-environment's copy in
+# sys.modules and ignore the path manipulation entirely.
 source_dir = None
 for i, arg in enumerate(sys.argv):
     if arg == "--source-dir" and i + 1 < len(sys.argv):
@@ -31,6 +32,8 @@ else:
     repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
     sys.path.insert(0, repo_root)
     sys.path.insert(1, os.path.join(repo_root, "oracles"))
+
+from gradabeam import GradaBeam, AdaBeam  # noqa: E402
 
 
 def get_median(lst: list[float]) -> float:

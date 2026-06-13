@@ -230,6 +230,12 @@ A self-comparison harness detects step-throughput regressions by benchmarking
 both the current `HEAD` and a baseline Git ref **on the same machine**, then
 failing if either designer is more than 1.20× slower than the baseline.
 
+**Prerequisites:** the benchmark loads BPNet, which requires the `examples` extra:
+
+```bash
+pip install -e ".[dev,examples]"
+```
+
 **Run locally** (against the merge-base of your current branch and `main`):
 
 ```bash
