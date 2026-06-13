@@ -172,7 +172,9 @@ class BPNet(tism.TISMModelClass):
         ret = self.inference_on_tensor(tensor)
         return ret.detach().clone().numpy()
 
-    def __call__(self, x: list[str], return_debug_info: bool = False) -> np.ndarray:
+    def __call__(
+        self, x: list[str], return_debug_info: bool = False
+    ) -> "np.ndarray | tuple[np.ndarray, dict]":
         if isinstance(x, str):
             raise ValueError(
                 f"BPNet input needs to be list of strings, not just string: {x}"

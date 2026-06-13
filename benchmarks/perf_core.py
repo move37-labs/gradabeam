@@ -11,9 +11,9 @@ import os
 import argparse
 import json
 import time
+from typing import Any
 
 from gradabeam import GradaBeam, AdaBeam
-from bpnet import BPNet
 
 # Inspect sys.argv for --source-dir before any other imports
 source_dir = None
@@ -56,6 +56,8 @@ def measure(
 
     Runs warmup_steps first, then executes n_repeats runs of steps_per_repeat steps.
     """
+    from bpnet import BPNet  # lazy import: bpnet-lite is an optional dependency
+
     start_seq = "A" * 3000
     model = BPNet(protein=protein)
 
@@ -83,6 +85,8 @@ def measure(
         rng_seed=5,
     )
 
+    designer_cls: type[GradaBeam] | type[AdaBeam]
+    kwargs: Any
     if designer_name.lower() == "gradabeam":
         designer_cls = GradaBeam
         kwargs = gradabeam_kwargs
