@@ -15,7 +15,9 @@ import sys
 import tempfile
 
 
-def run_cmd(cmd: str, cwd: str | None = None, check: bool = True) -> subprocess.CompletedProcess:
+def run_cmd(
+    cmd: str, cwd: str | None = None, check: bool = True
+) -> subprocess.CompletedProcess:
     """Helper to run a shell command and capture its output."""
     res = subprocess.run(cmd, shell=True, capture_output=True, text=True, cwd=cwd)
     if check and res.returncode != 0:
@@ -75,12 +77,12 @@ def run_measurement(
         f"--source-dir {cwd}"
     )
     res = run_cmd(cmd)
-    
+
     # Extract the JSON line from stdout, ignoring other print statements
     json_data = None
     for line in res.stdout.splitlines():
         line_str = line.strip()
-        if line_str.startswith('{"') and line_str.endswith('}'):
+        if line_str.startswith('{"') and line_str.endswith("}"):
             try:
                 json_data = json.loads(line_str)
                 break
@@ -150,7 +152,9 @@ def main():
     args = parser.parse_args()
 
     repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-    perf_core_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "perf_core.py"))
+    perf_core_path = os.path.abspath(
+        os.path.join(os.path.dirname(__file__), "perf_core.py")
+    )
 
     # Determine baseline ref
     if args.baseline_ref:
@@ -167,12 +171,17 @@ def main():
     print(f"Baseline Ref:  {baseline_ref}")
     print(f"Head Ref:      {head_ref}")
     print(f"Tolerance:     {args.max_slowdown}x max slowdown limit")
-    print(f"Parameters:    {args.n_repeats} repeats x {args.steps_per_repeat} steps "
-          f"(warmup: {args.warmup_steps})")
+    print(
+        f"Parameters:    {args.n_repeats} repeats x {args.steps_per_repeat} steps "
+        f"(warmup: {args.warmup_steps})"
+    )
     print("============================================================\n")
 
     if baseline_ref == head_ref:
-        print("Warning: Baseline ref is identical to HEAD ref. Self-comparing HEAD.", file=sys.stderr)
+        print(
+            "Warning: Baseline ref is identical to HEAD ref. Self-comparing HEAD.",
+            file=sys.stderr,
+        )
 
     # List of designers to run
     designers = ["gradabeam", "adabeam"] if args.designer == "both" else [args.designer]
@@ -239,7 +248,9 @@ def main():
             ratio = data["ratio"]
             verdict = data["verdict"]
             ratio_str = f"{ratio:.2f}x"
-            print(f"{ds.upper():<12} | {base_med:<18.4f} | {head_med:<14.4f} | {ratio_str:<8} | {verdict:<7}")
+            print(
+                f"{ds.upper():<12} | {base_med:<18.4f} | {head_med:<14.4f} | {ratio_str:<8} | {verdict:<7}"
+            )
         print("=" * len(header) + "\n")
 
         # Write JSON output if requested
