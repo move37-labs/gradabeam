@@ -11,7 +11,7 @@ numbers can be compared across runs and machines without false CI failures.
 import perf_core
 
 N_WARMUP_STEPS = 20
-N_MEASURED_STEPS = 200
+N_MEASURED_STEPS = 1000
 
 
 def benchmark_designer(designer_name: str) -> None:
