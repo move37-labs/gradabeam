@@ -99,6 +99,7 @@ def measure(
         raise ValueError(f"Unknown designer: {designer_name}")
 
     import inspect
+
     sig = inspect.signature(designer_cls.__init__)
     if "skip_repeat_sequences" in sig.parameters:
         kwargs["skip_repeat_sequences"] = False
