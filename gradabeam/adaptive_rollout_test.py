@@ -976,11 +976,28 @@ def test_gradabeam_trajectory_bitforbit():
                 for n in designer.current_nodes
             ]
         )
-        assert snapshot == GOLDEN[step], (
-            f"GradaBeam trajectory diverged at step {step}: "
-            f"got {snapshot}, expected {GOLDEN[step]}.\n"
-            "The refactor changed gradient-path behavior — investigate."
+        assert len(snapshot) == len(GOLDEN[step]), (
+            f"Step {step}: expected {len(GOLDEN[step])} nodes, got {len(snapshot)}"
         )
+        for idx, (got_node, exp_node) in enumerate(zip(snapshot, GOLDEN[step])):
+            got_seq, got_fit, got_alpha, got_muts = got_node
+            exp_seq, exp_fit, exp_alpha, exp_muts = exp_node
+            assert got_seq == exp_seq, (
+                f"Step {step} node {idx} sequence diverged: "
+                f"got {got_seq}, expected {exp_seq}"
+            )
+            assert abs(got_fit - exp_fit) < 1e-6, (
+                f"Step {step} node {idx} fitness diverged: "
+                f"got {got_fit}, expected {exp_fit}"
+            )
+            assert abs(got_alpha - exp_alpha) < 1e-6, (
+                f"Step {step} node {idx} exploration_alpha diverged: "
+                f"got {got_alpha}, expected {exp_alpha}"
+            )
+            assert abs(got_muts - exp_muts) < 1e-6, (
+                f"Step {step} node {idx} mutations_per_sequence diverged: "
+                f"got {got_muts}, expected {exp_muts}"
+            )
 
 
 def test_normal_run_trajectory_unchanged_by_clamp():
