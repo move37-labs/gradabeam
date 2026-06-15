@@ -725,7 +725,7 @@ class AdaptiveRolloutDesigner:
                     for _child, _par in zip(children, parent_nodes):
                         self._edit_count_log.append(
                             {
-                                "n_drawn": _child.edits_since_root
+                                "n_drawn": (_child.edits_since_root or 0)
                                 - (_par.edits_since_root or 0),
                                 "n_changed": sum(
                                     a != b for a, b in zip(_child.seq, _par.seq)
