@@ -35,7 +35,7 @@ jobs:
         run: pip install -e .[dev,examples]
 
       - name: Cache BPNet models
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cache/gradabeam/bpnet
           key: bpnet-models-${{ hashFiles('oracles/bpnet.py') }}
