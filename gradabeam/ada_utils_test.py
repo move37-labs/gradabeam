@@ -251,32 +251,34 @@ def test_get_tism_real_action_ordering():
 
 
 # ---------------------------------------------------------------------------
-# Tests for generate_random_mutant_actionspace and build_uniform_pos_and_chars
+# Tests for generate_random_mutant_actionspace and generate_random_mutant_positionspace
 # ---------------------------------------------------------------------------
 
-# Shared fixture data
+
+def _build_pos_and_chars(sequence: str, positions_to_mutate: list) -> list:
+    """Local helper: build 3L (position, char) list for action-space tests.
+
+    build_uniform_pos_and_chars was removed from production code since the
+    uniform path now uses position-space (L-vector) representation.  Tests
+    that exercise generate_random_mutant_actionspace still need a way to
+    construct the (position, character) input — this local helper serves that
+    role without re-adding dead production code.
+    """
+    from gradabeam import constants
+
+    result = []
+    for pos in positions_to_mutate:
+        ref = sequence[pos]
+        for base in constants.VOCAB:
+            if base != ref:
+                result.append((pos, base))
+    return result
+
+
+# Shared fixture data for action-space tests
 _SEQUENCE = "ACGTACGT"  # length 8
-_POS_AND_CHARS = ada_utils.build_uniform_pos_and_chars(
-    _SEQUENCE, list(range(len(_SEQUENCE)))
-)
+_POS_AND_CHARS = _build_pos_and_chars(_SEQUENCE, list(range(len(_SEQUENCE))))
 _UNIFORM_PROBS = np.ones(len(_POS_AND_CHARS), dtype=np.float64) / len(_POS_AND_CHARS)
-
-
-def test_build_uniform_pos_and_chars():
-    """Verify build_uniform_pos_and_chars builds correct 3L actions in positions-major order."""
-    pos_and_chars = ada_utils.build_uniform_pos_and_chars("AC", list(range(2)))
-    # Length of AC is 2. 3*2 = 6 actions.
-    # Pos 0 (A): non-ref are C, G, T
-    # Pos 1 (C): non-ref are A, G, T
-    expected = [
-        (0, "C"),
-        (0, "G"),
-        (0, "T"),
-        (1, "A"),
-        (1, "G"),
-        (1, "T"),
-    ]
-    assert pos_and_chars == expected
 
 
 @pytest.mark.parametrize("n_edits", [1, 2, 3, 5])
@@ -326,9 +328,7 @@ def test_actionspace_collision_regression():
     n_edits = 2
 
     # Put heavy mass on position 0's actions
-    pos_and_chars = ada_utils.build_uniform_pos_and_chars(
-        sequence, list(range(len(sequence)))
-    )
+    pos_and_chars = _build_pos_and_chars(sequence, list(range(len(sequence))))
     n_actions = len(pos_and_chars)
     probs = np.zeros(n_actions, dtype=np.float64)
     # Position 0 occupies indices [0, 1, 2]
@@ -377,9 +377,7 @@ def test_actionspace_guard_n_edits_zero():
 def test_actionspace_boundary_exceeds_positions():
     """n_edits exceeding available positions gets clamped to total positions, but doesn't crash."""
     sequence = "ACGT"  # length 4
-    pos_and_chars = ada_utils.build_uniform_pos_and_chars(
-        sequence, list(range(len(sequence)))
-    )
+    pos_and_chars = _build_pos_and_chars(sequence, list(range(len(sequence))))
     # 12 actions total across 4 positions.
     # Max positions to edit is 4.
     rng = np.random.default_rng(0)
@@ -427,9 +425,7 @@ def test_actionspace_guard_allzero_probs():
 def test_actionspace_weights_bias_selection():
     """Verify weights bias action selection."""
     sequence = "ACGTACGT"  # length 8
-    pos_and_chars = ada_utils.build_uniform_pos_and_chars(
-        sequence, list(range(len(sequence)))
-    )
+    pos_and_chars = _build_pos_and_chars(sequence, list(range(len(sequence))))
     # Let's put 80% weight on action 5 (position 1, base 'T' or similar) and spread the rest
     hot_idx = 5
     probs = np.ones(len(pos_and_chars), dtype=np.float64)
@@ -459,6 +455,132 @@ def test_actionspace_weights_bias_selection():
 
 
 # ---------------------------------------------------------------------------
+# Tests for generate_random_mutant_positionspace (uniform position-space path)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("n_edits", [1, 2, 3, 5])
+@pytest.mark.parametrize("seed", [0, 1, 42, 99, 137])
+def test_positionspace_edit_count_invariant(n_edits, seed):
+    """Mutant differs from input in exactly n_edits positions; no silent edits."""
+    sequence = "ACGTACGT"
+    positions = list(range(len(sequence)))
+    rng = np.random.default_rng(seed)
+    position_weights = np.ones(len(positions), dtype=np.float64) / len(positions)
+
+    mutant, chosen_indices, masked_weights, n_edited = (
+        ada_utils.generate_random_mutant_positionspace(
+            sequence=sequence,
+            positions_to_mutate=positions,
+            position_weights=position_weights,
+            n_edits=n_edits,
+            rng=rng,
+        )
+    )
+
+    actual_diffs = [i for i, (a, b) in enumerate(zip(sequence, mutant)) if a != b]
+    assert len(actual_diffs) == n_edits, (
+        f"Expected {n_edits} edits, got {len(actual_diffs)}: {actual_diffs}"
+    )
+    assert n_edited == n_edits
+
+    # No silent edit: every changed position has a genuinely different base.
+    for pos in actual_diffs:
+        assert mutant[pos] != sequence[pos], (
+            f"Silent edit at position {pos}: base unchanged ({sequence[pos]})."
+        )
+
+    # chosen_indices are valid indices into positions_to_mutate.
+    assert len(chosen_indices) == n_edits
+    for idx in chosen_indices:
+        assert 0 <= idx < len(positions)
+
+    # Masked positions have weight 0.
+    for idx in chosen_indices:
+        assert masked_weights[idx] == 0.0, (
+            f"Position index {idx} not masked after edit."
+        )
+
+
+def test_positionspace_boundary_exceeds_positions():
+    """n_edits exceeding available positions is clamped without crashing."""
+    sequence = "ACGT"
+    positions = list(range(len(sequence)))  # L=4
+    rng = np.random.default_rng(0)
+    weights = np.ones(len(positions), dtype=np.float64) / len(positions)
+
+    mutant, chosen_indices, masked_weights, n_edited = (
+        ada_utils.generate_random_mutant_positionspace(
+            sequence=sequence,
+            positions_to_mutate=positions,
+            position_weights=weights,
+            n_edits=7,  # exceeds L=4
+            rng=rng,
+        )
+    )
+
+    actual_diffs = [i for i, (a, b) in enumerate(zip(sequence, mutant)) if a != b]
+    assert len(actual_diffs) == 4, f"Expected 4 (clamped), got {len(actual_diffs)}"
+    assert n_edited == 4
+    assert masked_weights.sum() == 0.0  # all positions exhausted
+
+
+def test_positionspace_weights_bias_selection():
+    """Heavy position weight biases selection proportionally."""
+    sequence = "ACGTACGT"
+    positions = list(range(len(sequence)))  # L=8
+    hot_pos_idx = 2  # index into positions_to_mutate (sequence position 2)
+
+    weights = np.ones(len(positions), dtype=np.float64)
+    weights[hot_pos_idx] = 80.0
+    expected_rate = weights[hot_pos_idx] / weights.sum()
+
+    n_trials = 1000
+    hot_selected = 0
+    for seed in range(n_trials):
+        rng = np.random.default_rng(seed)
+        _, chosen_indices, _, _ = ada_utils.generate_random_mutant_positionspace(
+            sequence=sequence,
+            positions_to_mutate=positions,
+            position_weights=weights.copy(),
+            n_edits=1,
+            rng=rng,
+        )
+        if hot_pos_idx in chosen_indices:
+            hot_selected += 1
+
+    observed_rate = hot_selected / n_trials
+    sigma = np.sqrt(expected_rate * (1 - expected_rate) / n_trials)
+    assert abs(observed_rate - expected_rate) < 4 * sigma, (
+        f"Selection rate {observed_rate:.4f} not within 4σ of expected {expected_rate:.4f}."
+    )
+
+
+def test_positionspace_guard_n_edits_zero():
+    """n_edits=0 must raise AssertionError."""
+    with pytest.raises(AssertionError, match="n_edits"):
+        ada_utils.generate_random_mutant_positionspace(
+            sequence="ACGT",
+            positions_to_mutate=[0, 1, 2, 3],
+            position_weights=np.ones(4) / 4,
+            n_edits=0,
+            rng=np.random.default_rng(0),
+        )
+
+
+def test_positionspace_guard_allzero_weights():
+    """All-zero position weights must raise AssertionError."""
+    with pytest.raises(AssertionError, match="least one"):
+        ada_utils.generate_random_mutant_positionspace(
+            sequence="ACGT",
+            positions_to_mutate=[0, 1, 2, 3],
+            position_weights=np.zeros(4),
+            n_edits=1,
+            rng=np.random.default_rng(0),
+        )
+
+
+# ---------------------------------------------------------------------------
 # REGRESSION GUARD for the α-posterior
 # ---------------------------------------------------------------------------
 
@@ -472,9 +594,7 @@ def test_pfinal_equals_step_start_action_probability():
     generate_random_mutant_actionspace for the rationale.
     """
     sequence = "AAAA"
-    pos_and_chars = ada_utils.build_uniform_pos_and_chars(
-        sequence, [0, 1, 2, 3]
-    )  # 12 actions
+    pos_and_chars = _build_pos_and_chars(sequence, [0, 1, 2, 3])  # 12 actions
     # Non-uniform probs so the factorial reconstruction != probs[action] in the interior.
     probs = np.array(
         [0.30, 0.02, 0.02, 0.05, 0.05, 0.05, 0.10, 0.01, 0.04, 0.10, 0.10, 0.16],

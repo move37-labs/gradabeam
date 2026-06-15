@@ -266,21 +266,85 @@ class NumberEditsSamplerAdaBeam(NumberEditsSampler):
         )
 
 
-def build_uniform_pos_and_chars(
-    sequence: str, positions_to_mutate: list[int]
-) -> list[tuple[int, str]]:
-    """Build a standard 3L actions list of (position, character) pairs.
+def generate_random_mutant_positionspace(
+    sequence: str,
+    positions_to_mutate: list[int],
+    position_weights: np.ndarray,
+    n_edits: int,
+    rng: np.random.Generator,
+) -> tuple[str, list[int], np.ndarray, int]:
+    """Generate a mutant in position-space: pick positions by weight, then uniform non-ref base.
 
-    For each position in positions_to_mutate, we generate 3 non-reference actions.
+    This is the efficient uniform path.  It avoids the 3L tuple construction and
+    array operations of the action-space representation: instead of a (3L,)-vector
+    of (position, base) action probabilities, it carries an (L,)-vector of position
+    weights and draws the base at each chosen position uniformly from the 3
+    non-reference bases in VOCAB.
+
+    Distribution equivalence: uniform over 3L non-reference actions == uniform
+    position × uniform non-reference base.  These are the same distribution;
+    only the representation differs.
+
+    Args:
+        sequence: Current sequence to mutate.
+        positions_to_mutate: Ordered list of mutable position indices (length L).
+        position_weights: (L,)-length weight vector; must be non-negative with at
+            least one positive entry.  Positions with weight 0 have been masked
+            (edited in a prior step of this rollout chain).
+        n_edits: Intended number of distinct position edits.  Clamped to the
+            number of available (weight > 0) positions.
+        rng: Random number generator.
+
+    Returns:
+        (mutant_seq, chosen_position_indices, masked_position_weights, n_positions_edited)
+
+        - mutant_seq: The mutated sequence string.
+        - chosen_position_indices: Indices into positions_to_mutate (not sequence
+          positions) of the edited sites, for compatibility with the counter.
+        - masked_position_weights: Copy of position_weights with chosen indices
+          zeroed and renormalized; carry this onto the child node.
+        - n_positions_edited: Number of distinct positions edited (== effective_n).
     """
+    assert n_edits >= 1, f"n_edits ({n_edits}) must be >= 1"
+    position_weights = np.asarray(position_weights, dtype=np.float64).copy()
+    assert np.all(position_weights >= 0), "All position weights must be non-negative."
+    assert np.any(position_weights > 0), "At least one position weight must be > 0."
+
+    available = np.where(position_weights > 0)[0]
+    effective_n = min(n_edits, len(available))
+
+    w_avail = position_weights[available]
+    chosen_indices = rng.choice(
+        available,
+        size=effective_n,
+        replace=False,
+        p=w_avail / w_avail.sum(),
+    )
+
+    # For each chosen position, pick uniformly from the 3 non-reference bases.
+    # VOCAB = ["A", "C", "G", "T"]; non-ref bases are VOCAB with ref removed.
+    # Use a single rng call (size=effective_n) instead of one per position.
     all_bases = constants.VOCAB
-    pos_and_chars = []
-    for pos in positions_to_mutate:
+    base_picks = rng.integers(0, 3, size=effective_n)
+    mutant = list(sequence)
+    for i, idx in enumerate(chosen_indices):
+        pos = positions_to_mutate[int(idx)]
         ref = sequence[pos]
-        alts = [b for b in all_bases if b != ref]
-        for alt in alts:
-            pos_and_chars.append((pos, alt))
-    return pos_and_chars
+        alts = [b for b in all_bases if b != ref]  # always exactly 3 entries
+        mutant[pos] = alts[int(base_picks[i])]
+
+    # Mask chosen positions in the weight vector and renormalize.
+    position_weights[chosen_indices] = 0.0
+    total = position_weights.sum()
+    if total > 0:
+        position_weights /= total
+
+    return (
+        "".join(mutant),
+        chosen_indices.tolist(),
+        position_weights,
+        effective_n,
+    )
 
 
 def generate_random_mutant_actionspace(

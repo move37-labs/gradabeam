@@ -33,6 +33,26 @@ from gradabeam.adaptive_rollout import (
 # Helpers
 # ---------------------------------------------------------------------------
 
+
+def _build_pos_and_chars(sequence: str, positions_to_mutate: list) -> list:
+    """Local helper: build 3L (position, char) list for gradient-path test fixtures.
+
+    build_uniform_pos_and_chars was removed from production code since the
+    uniform path now uses L-vector position-space representation.  Tests that
+    exercise the gradient path or generate_random_mutant_actionspace directly
+    still need a way to construct (position, character) pairs.
+    """
+    from gradabeam import constants
+
+    result = []
+    for pos in positions_to_mutate:
+        ref = sequence[pos]
+        for base in constants.VOCAB:
+            if base != ref:
+                result.append((pos, base))
+    return result
+
+
 # ---------------------------------------------------------------------------
 # No-double-edit-per-rollout — exercises exhaustion
 # ---------------------------------------------------------------------------
@@ -284,7 +304,8 @@ def test_no_silent_edits_corrected_path():
         "use_gradients must be False for the corrected gradient-free path."
     )
 
-    # Direct test: build a known parent node and call _mutate_gradient_nodes.
+    # Direct test: build a known position-space parent node and call the strategy's propose().
+    # The uniform path now uses L-vector position weights, not 3L action probs.
     n = len(start_seq)
     parent = RolloutNodeWithProbs(
         seq=start_seq,
@@ -292,26 +313,30 @@ def test_no_silent_edits_corrected_path():
         edits_since_root=0,
         mutations_per_sequence=float(n_edits_target),
         exploration_alpha=0.5,
-        probs=np.ones(3 * n, dtype=np.float64) / (3 * n),
+        probs=None,
         gradient_probs=None,
-        pos_and_chars=ada_utils.build_uniform_pos_and_chars(start_seq, list(range(n))),
+        pos_and_chars=None,
+        position_weights=np.ones(n, dtype=np.float64) / n,
         n_positions_remaining=n,
     )
 
     n_trials = 20
     for _ in range(n_trials):
-        children = designer._mutate_gradient_nodes(
-            [parent], [n_edits_target], [float(n_edits_target)]
+        proposal = designer.strategy.propose(
+            parent,
+            designer.rng,
+            n_edits_target,
+            designer.positions_to_mutate,
         )
-        child = children[0]
+        child_seq = proposal.mutant_seq
 
         diffs = [
-            (i, start_seq[i], child.seq[i])
+            (i, start_seq[i], child_seq[i])
             for i in range(len(start_seq))
-            if start_seq[i] != child.seq[i]
+            if start_seq[i] != child_seq[i]
         ]
-        # Exactly n_edits_target positions should differ (position-space operator
-        # guarantees no silent edits, so diff count == edits made).
+        # Exactly n_edits_target positions should differ; position-space operator
+        # guarantees no silent edits so diff count == edits made.
         assert len(diffs) == n_edits_target, (
             f"Expected exactly {n_edits_target} diffs, got {len(diffs)}: {diffs}"
         )
@@ -492,6 +517,7 @@ def test_rollout_length_convention():
         max_rollout_len=5,
     )
     # Manually give the initial beam nodes fitness=1.0 so children (fitness=0) get rejected.
+    # Use position-space (L-vector) nodes — the designer uses UniformActionStrategy.
     n = len(designer_rej.positions_to_mutate)
     fake_roots = [
         RolloutNodeWithProbs(
@@ -500,11 +526,10 @@ def test_rollout_length_convention():
             edits_since_root=0,
             mutations_per_sequence=1.0,
             exploration_alpha=0.5,
-            probs=np.ones(3 * n, dtype=np.float64) / (3 * n),
+            probs=None,
             gradient_probs=None,
-            pos_and_chars=ada_utils.build_uniform_pos_and_chars(
-                node.seq, list(range(n))
-            ),
+            pos_and_chars=None,
+            position_weights=np.ones(n, dtype=np.float64) / n,
             n_positions_remaining=n,
         )
         for node in designer_rej.current_nodes[:2]  # 2 roots
@@ -553,9 +578,10 @@ def test_alpha_unchanged_on_gradient_free_path():
         edits_since_root=0,
         mutations_per_sequence=1.0,
         exploration_alpha=initial_alpha,
-        probs=np.ones(18) / 18,
-        gradient_probs=None,  # gradient-free
-        pos_and_chars=ada_utils.build_uniform_pos_and_chars("AAAAAA", list(range(6))),
+        probs=None,
+        gradient_probs=None,  # gradient-free — this is what gates _compute_child_alpha
+        pos_and_chars=None,
+        position_weights=np.ones(6, dtype=np.float64) / 6,
         n_positions_remaining=6,
     )
 
@@ -577,7 +603,7 @@ def test_alpha_unchanged_on_gradient_free_path():
 def test_gradient_picks_base():
     """Verify that when alpha is near 0, the base selection matches the capped softmax distribution."""
     sequence = "AAAA"
-    pos_and_chars = ada_utils.build_uniform_pos_and_chars(sequence, [0, 1, 2, 3])
+    pos_and_chars = _build_pos_and_chars(sequence, [0, 1, 2, 3])
     # 12 actions total.
     # Let's say action 0 (pos 0, base 'C') has 0.10 capped probability.
     # Other 11 actions share 0.90 uniformly (0.90/11 ≈ 0.0818).
@@ -620,7 +646,7 @@ def test_adabeam_is_gradabeam_gradients_off():
     intentionally avoid (see design comment in generate_random_mutant_actionspace).
     """
     start_seq = "ACGTACGT"
-    pos_and_chars = ada_utils.build_uniform_pos_and_chars(start_seq, list(range(8)))
+    pos_and_chars = _build_pos_and_chars(start_seq, list(range(8)))
 
     _, _, _, p_final_chosen_list, _ = ada_utils.generate_random_mutant_actionspace(
         sequence=start_seq,
@@ -742,7 +768,7 @@ def test_alpha_base_coupling():
 def test_positional_mask_zeroes_whole_position():
     """After editing action k, all 3 entries of that position are zero in carried probs."""
     sequence = "ACGT"
-    pos_and_chars = ada_utils.build_uniform_pos_and_chars(sequence, list(range(4)))
+    pos_and_chars = _build_pos_and_chars(sequence, list(range(4)))
     n_actions = len(pos_and_chars)  # 12
     probs = np.ones(n_actions, dtype=np.float64) / n_actions
 
@@ -862,6 +888,99 @@ def test_pbt_clamp_keeps_mu_strictly_below_one():
     )
     mu = new_rate / L
     assert mu < 1.0, f"mu = {mu} must be < 1.0 after clamp"
+
+
+def test_gradabeam_trajectory_bitforbit():
+    """GradaBeam trajectory must be bit-for-bit identical before and after the
+    position-space UniformActionStrategy refactor.
+
+    Golden values captured on commit 8d90703 (pre-refactor) by running:
+        python -c "
+        from gradabeam import testing_utils
+        from gradabeam.adaptive_rollout import AdaptiveRolloutDesigner, GradientActionStrategy
+        designer = AdaptiveRolloutDesigner(
+            model_fn=testing_utils.CountLetterModel(),
+            start_sequence='ACGTACGT', mutations_per_sequence=2, beam_size=4,
+            n_rollouts_per_root=2, eval_batch_size=1, rng_seed=42,
+            strategy=GradientActionStrategy(), use_gradients=True, use_pbt=True,
+            exploration_alpha=0.5,
+        )
+        for step in range(4):
+            designer.run(n_steps=1)
+            snapshot = sorted([
+                (n.seq, float(n.fitness), round(float(n.exploration_alpha), 10),
+                 round(float(n.mutations_per_sequence), 10))
+                for n in designer.current_nodes
+            ])
+            print(f'STEP {step}: {snapshot}')
+        "
+
+    Any divergence means the refactor changed gradient-path behavior.
+    """
+    GOLDEN = [
+        # step 0
+        [
+            ("CCAAACCC", 5.0, 0.3046075801, 2.0),
+            ("CCAGACCC", 5.0, 0.3134616055, 1.0),
+            ("CCAGGCAC", 4.0, 0.3413592515, 2.0),
+            ("CTCCCTAC", 5.0, 0.5027434518, 3.0),
+        ],
+        # step 1
+        [
+            ("CCCGACCC", 6.0, 0.1232249424, 1.0),
+            ("CCCGCCCC", 7.0, 0.0433671781, 1.0),
+            ("CCCGCCCG", 6.0, 0.0585061034, 1.0),
+            ("CCCTTCCC", 6.0, 0.098138035, 1.0),
+        ],
+        # step 2
+        [
+            ("CCCACCCC", 7.0, 0.0108428624, 1.0),
+            ("CCCCCCCC", 8.0, 0.0161492341, 2.0),
+            ("CCCTCCCC", 7.0, 0.0108428624, 1.0),
+            ("CCCTCGCC", 6.0, 0.0108428623, 1.0),
+        ],
+        # step 3
+        [
+            ("CCCCCACC", 7.0, 0.01, 1.0),
+            ("CCCCCCCC", 8.0, 0.01, 1.0),
+            ("CCTCCCCC", 7.0, 0.0118450783, 2.0),
+            ("CCTCCCCC", 7.0, 0.016149234, 1.0),
+        ],
+    ]
+
+    model = testing_utils.CountLetterModel()
+    designer = AdaptiveRolloutDesigner(
+        model_fn=model,
+        start_sequence="ACGTACGT",
+        mutations_per_sequence=2,
+        beam_size=4,
+        n_rollouts_per_root=2,
+        eval_batch_size=1,
+        rng_seed=42,
+        strategy=GradientActionStrategy(),
+        use_gradients=True,
+        use_pbt=True,
+        exploration_alpha=0.5,
+    )
+
+    for step in range(4):
+        designer.run(n_steps=1)
+        snapshot = sorted(
+            [
+                (
+                    n.seq,
+                    float(n.fitness),
+                    round(float(n.exploration_alpha), 10),
+                    round(float(n.mutations_per_sequence), 10),
+                )
+                for n in designer.current_nodes
+            ]
+        )
+        assert snapshot == GOLDEN[step], (
+            f"GradaBeam trajectory diverged at step {step}: "
+            f"got {snapshot}, expected {GOLDEN[step]}.\n"
+            "The refactor changed gradient-path behavior — investigate."
+        )
 
 
 def test_normal_run_trajectory_unchanged_by_clamp():

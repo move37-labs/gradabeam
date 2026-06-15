@@ -13,6 +13,20 @@ position — NOT uniformly.  Root-step position-selection behavior is therefore
 identical to drawing positions by the marginal weight; the only intended
 divergence from the old code is the (previously buggy) multi-step positional
 masking, which now correctly zeros all 3 actions of an edited position.
+
+Strategy representations
+------------------------
+UniformActionStrategy  — position-space (L-vector).
+    Carries np.ones(L)/L position weights; draws position uniformly, then base
+    uniformly from the 3 non-reference bases.  No 3L tuple construction.
+    Distribution-identical to the old action-space uniform path.
+
+GradientActionStrategy — action-space (3L-vector).
+    Carries TISM-derived mixed action probabilities.  The gradient picks position
+    AND base jointly, which requires the joint 3L action space.
+    Implementation lives on AdaptiveRolloutDesigner (TISM init, _mutate_gradient_nodes,
+    _rollout, gradient cache); this strategy is a thin delegation wrapper that
+    gives both strategies the same interface without relocating gradient logic.
 """
 
 from __future__ import annotations
@@ -35,20 +49,57 @@ PositionsAndCharactersType = ada_utils.PositionsAndCharactersType
 
 
 # ---------------------------------------------------------------------------
+# Proposal result — returned by strategy.propose()
+# ---------------------------------------------------------------------------
+
+
+@dataclasses.dataclass
+class ProposalResult:
+    """Output of strategy.propose() for a single node.
+
+    Universal fields (both strategies):
+        mutant_seq, n_edits_effective, n_positions_edited, child_alpha
+
+    Strategy-specific state (each strategy populates its fields and leaves
+    the other strategy's fields as None).  This is an inherent tradeoff of
+    two representations (L-vector vs 3L) sharing one node type:
+        probs, pos_and_chars, gradient_probs — used by GradientActionStrategy
+        position_weights                     — used by UniformActionStrategy
+    """
+
+    mutant_seq: str
+    n_edits_effective: int
+    n_positions_edited: int
+    child_alpha: float
+    # GradientActionStrategy state (None for UniformActionStrategy):
+    probs: np.ndarray | None
+    pos_and_chars: PositionsAndCharactersType | None
+    gradient_probs: np.ndarray | None
+    # UniformActionStrategy state (None for GradientActionStrategy):
+    position_weights: np.ndarray | None
+
+
+# ---------------------------------------------------------------------------
 # Extended rollout-node type
 # ---------------------------------------------------------------------------
 
 
 @dataclasses.dataclass(frozen=True)
 class RolloutNodeWithProbs(ada_utils.RolloutNode):
-    """Rollout node that carries gradient + action-space state.
+    """Rollout node that carries mutation strategy state.
 
     Field notes
     -----------
     probs : np.ndarray or None
-        3L mixed action-probability vector.
+        GradientActionStrategy: 3L mixed action-probability vector.
+        UniformActionStrategy: None (uses position_weights instead).
     pos_and_chars : list[tuple[int, str]] or None
-        (position, character) pairs of the actions.
+        GradientActionStrategy: (position, character) pairs of the actions (3L).
+        UniformActionStrategy: None.
+    position_weights : np.ndarray or None
+        UniformActionStrategy: L-vector of position weights (uniform initially,
+        zeroed at edited positions across rollout steps).
+        GradientActionStrategy: None (uses probs instead).
     edits_since_root : int or None
         Depth in the current rollout chain, starting at 0 for roots.
     mutations_per_sequence : float
@@ -56,21 +107,22 @@ class RolloutNodeWithProbs(ada_utils.RolloutNode):
     exploration_alpha : float
         Current mixing coefficient — 0 = pure gradient, 1 = pure uniform.
     gradient_probs : np.ndarray or None
-        3L vector of pure-gradient action probabilities from the most recent TISM
-        call, before any masking or mixing. Used to recompute P_final for the α-update.
-        None for the corrected gradient-free path.
-    n_positions_remaining : int or None
-        Number of mutable positions whose 3-action slice in `probs` is still non-zero.
-        Maintained as an O(1) counter so that exhaustion checks and the α-update avoid
-        scanning the full 9000-element probs array each call.
-        Invariant: n_positions_remaining * 3 == (probs > 0).sum() whenever probs is not
-        None.  None iff probs is None (gradient seed node, pre-TISM).
+        GradientActionStrategy: 3L vector of pure-gradient action probabilities
+        from the most recent TISM call, before any masking or mixing.
+        None for the uniform path.
+    n_positions_remaining : int
+        Number of mutable positions still available (not yet masked in this chain).
+        O(1) counter used by _filter_exhausted and _compute_child_alpha.
+        Invariant (gradient path):  n_positions_remaining * 3 == (probs > 0).sum()
+        Invariant (uniform path):   n_positions_remaining == (position_weights > 0).sum()
+        Set by attach_initial_state; never None after initialization.
     """
 
     probs: np.ndarray | None = field(default=None, hash=False, compare=False)
     pos_and_chars: PositionsAndCharactersType | None = field(
         default=None, hash=False, compare=False
     )
+    position_weights: np.ndarray | None = field(default=None, hash=False, compare=False)
     edits_since_root: int | None = None
     mutations_per_sequence: float = dataclasses.field(
         default=1.0, compare=False, hash=False
@@ -100,11 +152,158 @@ class RolloutNodeWithProbs(ada_utils.RolloutNode):
 
 
 class UniformActionStrategy:
-    """Uniform action-space strategy (corrected AdaBeam/gradients-off)."""
+    """Position-space (L-vector) strategy for AdaBeam (gradient-free).
+
+    Representation: np.ones(L)/L position-weight vector.  No 3L tuple
+    construction, no 3L array operations.  The base at each chosen position
+    is drawn uniformly from the 3 non-reference VOCAB bases, which is
+    distribution-identical to the old action-space uniform path:
+        uniform over 3L actions == uniform position × uniform non-ref base.
+
+    attach_initial_state  — creates the L-vector; costs O(L), not O(3L).
+    propose               — calls generate_random_mutant_positionspace.
+    get_edit_params       — draws n_edits from the designer's fixed sampler;
+                            rate is unchanged (no PBT on this path).
+    """
+
+    def attach_initial_state(
+        self,
+        node: "RolloutNodeWithProbs",
+        designer: "AdaptiveRolloutDesigner",
+    ) -> "RolloutNodeWithProbs":
+        """Return a fresh node with uniform L-vector position weights."""
+        L = len(designer.positions_to_mutate)
+        mps = getattr(node, "mutations_per_sequence", float(designer.mu * L))
+        alpha = getattr(node, "exploration_alpha", float(designer.exploration_alpha))
+        return RolloutNodeWithProbs(
+            seq=node.seq,
+            fitness=node.fitness,
+            edits_since_root=0,
+            mutations_per_sequence=mps,
+            exploration_alpha=alpha,
+            probs=None,
+            pos_and_chars=None,
+            position_weights=np.ones(L, dtype=np.float64) / L,
+            gradient_probs=None,
+            n_positions_remaining=L,
+        )
+
+    def propose(
+        self,
+        node: "RolloutNodeWithProbs",
+        rng: np.random.Generator,
+        n_edits: int,
+        positions_to_mutate: list[int],
+    ) -> "ProposalResult":
+        """Mutate node using position-space sampling; return ProposalResult."""
+        assert node.position_weights is not None
+        mutant_seq, _, masked_weights, n_positions_edited = (
+            ada_utils.generate_random_mutant_positionspace(
+                sequence=node.seq,
+                positions_to_mutate=positions_to_mutate,
+                position_weights=node.position_weights,
+                n_edits=n_edits,
+                rng=rng,
+            )
+        )
+        return ProposalResult(
+            mutant_seq=mutant_seq,
+            n_edits_effective=n_positions_edited,
+            n_positions_edited=n_positions_edited,
+            child_alpha=float(node.exploration_alpha),  # unchanged on uniform path
+            probs=None,
+            pos_and_chars=None,
+            gradient_probs=None,
+            position_weights=masked_weights,
+        )
+
+    def get_edit_params(
+        self,
+        node: "RolloutNodeWithProbs",
+        designer: "AdaptiveRolloutDesigner",
+    ) -> tuple[int, float]:
+        """Draw n_edits from the fixed sampler; rate is unchanged."""
+        n_edits = int(designer.num_mutations_sampler.sample(1)[0])
+        return n_edits, float(node.mutations_per_sequence)
 
 
 class GradientActionStrategy:
-    """Gradient-guided action-space strategy (GrAdaBeam)."""
+    """Action-space (3L-vector) strategy for GrAdaBeam (gradient-guided).
+
+    Representation: TISM-derived mixed action-probability vector of length 3L.
+    The gradient picks position AND base jointly, which requires the joint 3L
+    action space.
+
+    This class is a thin delegation wrapper: all implementation stays on
+    AdaptiveRolloutDesigner (TISM init, gradient cache, _mutate_gradient_nodes,
+    _rollout, _compute_child_alpha).  The strategy methods call into those
+    existing designer methods without relocating any gradient logic.
+
+    attach_initial_state  — delegates to designer.initialize_roots_with_gradients.
+    propose               — delegates to ada_utils.generate_random_mutant_actionspace
+                            + designer._compute_child_alpha.
+    get_edit_params       — delegates to designer._get_next_mutation_params.
+    """
+
+    def attach_initial_state(
+        self,
+        node: "RolloutNodeWithProbs",
+        designer: "AdaptiveRolloutDesigner",
+    ) -> "RolloutNodeWithProbs":
+        """Compute TISM and attach mixed 3L probs; delegates to designer."""
+        return designer.initialize_roots_with_gradients([node])[0]
+
+    def propose(
+        self,
+        node: "RolloutNodeWithProbs",
+        rng: np.random.Generator,
+        n_edits: int,
+        positions_to_mutate: list[int],
+    ) -> "ProposalResult":
+        """Mutate node using action-space sampling; delegates to designer helpers."""
+        assert node.probs is not None
+        assert node.pos_and_chars is not None
+        (
+            mutant_seq,
+            _selected_idx,
+            masked_probs,
+            p_final_chosen_list,
+            n_positions_edited,
+        ) = ada_utils.generate_random_mutant_actionspace(
+            sequence=node.seq,
+            pos_and_chars_to_mutate=node.pos_and_chars,
+            n_edits=n_edits,
+            rng=rng,
+            probs=node.probs,
+        )
+        # _compute_child_alpha lives on the designer (tests call it directly).
+        # We need a reference; it will be set by AdaptiveRolloutDesigner.__init__.
+        child_alpha = self._designer._compute_child_alpha(
+            node=node,
+            p_final_chosen_list=p_final_chosen_list,
+        )
+        return ProposalResult(
+            mutant_seq=mutant_seq,
+            n_edits_effective=n_positions_edited,
+            n_positions_edited=n_positions_edited,
+            child_alpha=child_alpha,
+            probs=masked_probs,
+            pos_and_chars=node.pos_and_chars,
+            gradient_probs=node.gradient_probs,
+            position_weights=None,
+        )
+
+    def get_edit_params(
+        self,
+        node: "RolloutNodeWithProbs",
+        designer: "AdaptiveRolloutDesigner",
+    ) -> tuple[int, float]:
+        """Draw n_edits and PBT-adapted rate; delegates to designer."""
+        return designer._get_next_mutation_params(node)
+
+    def _set_designer(self, designer: "AdaptiveRolloutDesigner") -> None:
+        """Called once by AdaptiveRolloutDesigner.__init__ to give back-reference."""
+        self._designer = designer
 
 
 # ---------------------------------------------------------------------------
@@ -182,6 +381,10 @@ class AdaptiveRolloutDesigner:
             raise ValueError("GradientActionStrategy requires use_gradients=True.")
 
         self.strategy = strategy
+        # Give GradientActionStrategy a back-reference so its propose() can call
+        # designer methods (_compute_child_alpha) without relocating that logic.
+        if isinstance(strategy, GradientActionStrategy):
+            strategy._set_designer(self)
         self.use_gradients = use_gradients
         self.use_pbt = use_pbt
         self.exploration_alpha = exploration_alpha
@@ -227,9 +430,7 @@ class AdaptiveRolloutDesigner:
         if use_gradients:
             self._init_beam_gradient(start_sequence, beam_size, mutations_per_sequence)
         else:
-            self._init_beam_actionspace(
-                start_sequence, beam_size, mutations_per_sequence
-            )
+            self._init_beam_uniform(start_sequence, beam_size, mutations_per_sequence)
 
     # ── sampler helpers (gradient/PBT path) ─────────────────────────────────
 
@@ -291,30 +492,23 @@ class AdaptiveRolloutDesigner:
                 )
             )
 
-    def _init_beam_actionspace(
+    def _init_beam_uniform(
         self,
         start_sequence: str,
         beam_size: int,
         mutations_per_sequence: float,
     ) -> None:
-        """Corrected gradient-free initial beam (uniform action weights).
+        """Gradient-free initial beam using the uniform position-space strategy.
 
         Bug 2 (NaN fitness) analysis: seed_node carries fitness=np.float32(nan).
         This NaN is safe:
-          * _mutate_gradient_nodes only reads node.seq, node.probs,
-            node.exploration_alpha, and node.edits_since_root from the seed;
-            children receive their fitness from get_batched_fitness(), not from
-            the seed.
+          * attach_initial_state reads node.seq, node.mutations_per_sequence, and
+            node.exploration_alpha from the seed; children receive their fitness
+            from get_batched_fitness(), not from the seed.
           * seed_node is never appended to current_nodes; only its children are.
-          * No keep/reject comparison (child.fitness >= cmp_node.fitness) is
-            performed against the seed_node.
+          * No keep/reject comparison is performed against the seed_node.
         Therefore NaN cannot propagate to any comparison or tracker.
         """
-        pos_and_chars = ada_utils.build_uniform_pos_and_chars(
-            start_sequence, self.positions_to_mutate
-        )
-        n_actions = len(pos_and_chars)
-        init_probs = np.ones(n_actions, dtype=np.float64) / n_actions
         seed_node = RolloutNodeWithProbs(
             seq=start_sequence,
             fitness=np.float32(
@@ -323,22 +517,48 @@ class AdaptiveRolloutDesigner:
             edits_since_root=0,
             mutations_per_sequence=float(mutations_per_sequence),
             exploration_alpha=float(self.exploration_alpha),
-            probs=init_probs,
-            pos_and_chars=pos_and_chars,
+            probs=None,
+            pos_and_chars=None,
+            position_weights=None,  # attach_initial_state will set this
             gradient_probs=None,
-            n_positions_remaining=len(self.positions_to_mutate),
+            n_positions_remaining=None,  # set by attach_initial_state
         )
+        # Initialize: attach position-space state to the seed.
+        initialized_seed = self.strategy.attach_initial_state(seed_node, self)
         num_edit_locs = [int(x) for x in self.num_mutations_sampler.sample(beam_size)]
-        self.current_nodes = []
+
+        seqs: list[str] = []
+        child_state_list: list[ProposalResult] = []
         for i in range(0, beam_size, self.eval_batch_size):
             cur_edits = num_edit_locs[i : i + self.eval_batch_size]
-            self.current_nodes.extend(
-                self._mutate_gradient_nodes(
-                    [seed_node] * len(cur_edits),
-                    cur_edits,
-                    [float(mutations_per_sequence)] * len(cur_edits),
+            for n_edits in cur_edits:
+                proposal = self.strategy.propose(
+                    initialized_seed,
+                    self.rng,
+                    n_edits,
+                    self.positions_to_mutate,
                 )
+                seqs.append(proposal.mutant_seq)
+                child_state_list.append(proposal)
+
+        fitnesses = self.get_batched_fitness(seqs)
+        self.current_nodes = [
+            RolloutNodeWithProbs(
+                seq=p.mutant_seq,
+                fitness=np.float32(float(f)),
+                probs=p.probs,
+                pos_and_chars=p.pos_and_chars,
+                position_weights=p.position_weights,
+                edits_since_root=p.n_edits_effective,
+                mutations_per_sequence=float(mutations_per_sequence),
+                exploration_alpha=p.child_alpha,
+                gradient_probs=p.gradient_probs,
+                n_positions_remaining=(
+                    len(self.positions_to_mutate) - p.n_positions_edited
+                ),
             )
+            for p, f in zip(child_state_list, fitnesses)
+        ]
 
     # ── public API ───────────────────────────────────────────────────────────
 
@@ -416,30 +636,33 @@ class AdaptiveRolloutDesigner:
         )
 
     def propose_sequences(self, root_nodes: list) -> list:
-        """Route to the correct operator path based on strategy and gradient flag.
+        """Route to the correct rollout path based on strategy type.
 
         Routing table:
-          no grads   → _propose_sequences_actionspace
-          with grads → _propose_sequences_gradient
+          UniformActionStrategy  → _propose_sequences_uniform
+          GradientActionStrategy → _propose_sequences_gradient
+
+        The isinstance dispatch lives here at the entry point only; neither
+        inner rollout loop contains space/isinstance branching.
         """
-        if not self.use_gradients:
-            return self._propose_sequences_actionspace(root_nodes)
-        else:
+        if isinstance(self.strategy, GradientActionStrategy):
             return self._propose_sequences_gradient(root_nodes)
+        else:
+            return self._propose_sequences_uniform(root_nodes)
 
-    # ── Path 2: corrected gradient-free (corrected AdaBeam) ─────────────────
+    # ── Path 2: uniform position-space (AdaBeam) ────────────────────────────
 
-    def _propose_sequences_actionspace(self, root_nodes: list) -> list:
-        """Corrected gradient-free rollout using action-space operator.
+    def _propose_sequences_uniform(self, root_nodes: list) -> list:
+        """Position-space rollout using UniformActionStrategy.
 
-        This is the scientific comparison point: "corrected AdaBeam"
-        ≡ GradaBeam with gradients off + uniform weights.  No TISM is computed.
-        Actions are selected uniformly from those whose positions have not yet
-        been edited in the current rollout chain. Rollout chains terminate when all
-        positions are exhausted.
+        This is the corrected AdaBeam path.  No TISM is computed.  Positions are
+        selected uniformly via the strategy's L-vector; bases are drawn uniformly
+        from the 3 non-reference bases at each chosen position.  Rollout chains
+        terminate when all mutable positions have been edited (exhaustion) or a
+        child is rejected.
 
-        Rollout-length convention: same as _rollout.  Both exhaustion (recorded
-        before the increment) and rejection (recorded after) capture
+        Rollout-length convention: same as _rollout.  Exhaustion (recorded before
+        the increment) and rejection (recorded after) both capture
         cur_rollout_length = number of oracle calls made in the chain.
         See _rollout docstring for the full explanation.
 
@@ -451,8 +674,10 @@ class AdaptiveRolloutDesigner:
         root_nodes_effective = root_nodes * self.n_rollouts_per_root
         for i in range(0, len(root_nodes_effective), self.eval_batch_size):
             cur_root_nodes = root_nodes_effective[i : i + self.eval_batch_size]
-            # Attach fresh uniform action-space probs; no TISM.
-            parent_nodes = [self._attach_uniform_probs(n) for n in cur_root_nodes]
+            # Attach fresh L-vector position weights; no TISM, no 3L tuple construction.
+            parent_nodes = [
+                self.strategy.attach_initial_state(n, self) for n in cur_root_nodes
+            ]
 
             cur_rollout_length = 0
             while len(parent_nodes) > 0 and cur_rollout_length < self.max_rollout_len:
@@ -462,21 +687,46 @@ class AdaptiveRolloutDesigner:
                 if not parent_nodes:
                     break
 
-                num_edit_locs = [
-                    int(x) for x in self.num_mutations_sampler.sample(len(parent_nodes))
+                proposals: list[ProposalResult] = []
+                for node in parent_nodes:
+                    n_edits, new_rate = self.strategy.get_edit_params(node, self)
+                    proposal = self.strategy.propose(
+                        node, self.rng, n_edits, self.positions_to_mutate
+                    )
+                    proposals.append(proposal)
+
+                seqs = [p.mutant_seq for p in proposals]
+                fitnesses = self.get_batched_fitness(seqs)
+
+                children = [
+                    RolloutNodeWithProbs(
+                        seq=p.mutant_seq,
+                        fitness=np.float32(float(f)),
+                        probs=p.probs,
+                        pos_and_chars=p.pos_and_chars,
+                        position_weights=p.position_weights,
+                        edits_since_root=(node.edits_since_root or 0)
+                        + p.n_edits_effective,
+                        mutations_per_sequence=node.mutations_per_sequence,
+                        exploration_alpha=p.child_alpha,
+                        gradient_probs=p.gradient_probs,
+                        n_positions_remaining=(
+                            (
+                                node.n_positions_remaining
+                                or len(self.positions_to_mutate)
+                            )
+                            - p.n_positions_edited
+                        ),
+                    )
+                    for p, f, node in zip(proposals, fitnesses, parent_nodes)
                 ]
-                children = self._mutate_gradient_nodes(
-                    parent_nodes,
-                    num_edit_locs,
-                    [n.mutations_per_sequence for n in parent_nodes],
-                )
+
                 if self.debug:
-                    for _n_d, _child, _par in zip(
-                        num_edit_locs, children, parent_nodes
-                    ):
+                    for _child, _par in zip(children, parent_nodes):
                         self._edit_count_log.append(
                             {
-                                "n_drawn": int(_n_d),
+                                "n_drawn": _child.edits_since_root
+                                - (_par.edits_since_root or 0),
                                 "n_changed": sum(
                                     a != b for a, b in zip(_child.seq, _par.seq)
                                 ),
@@ -504,36 +754,6 @@ class AdaptiveRolloutDesigner:
             {"seq": n.seq, "fitness": float(n.fitness)} for n in sorted_nodes
         ]
         return sorted_nodes[: self.beam_size]
-
-    def _attach_uniform_probs(self, node: Any) -> RolloutNodeWithProbs:
-        """Return a RolloutNodeWithProbs with fresh uniform action probabilities.
-
-        Used to initialize each rollout in the corrected gradient-free path.
-        The action space and position budget are reset to full at the start of each
-        rollout chain.
-        """
-        pos_and_chars = ada_utils.build_uniform_pos_and_chars(
-            node.seq, self.positions_to_mutate
-        )
-        n_actions = len(pos_and_chars)
-        init_probs = np.ones(n_actions, dtype=np.float64) / n_actions
-        mps = getattr(
-            node,
-            "mutations_per_sequence",
-            float(self.mu * len(self.positions_to_mutate)),
-        )
-        alpha = getattr(node, "exploration_alpha", float(self.exploration_alpha))
-        return RolloutNodeWithProbs(
-            seq=node.seq,
-            fitness=node.fitness,
-            edits_since_root=0,
-            mutations_per_sequence=mps,
-            exploration_alpha=alpha,
-            probs=init_probs,
-            pos_and_chars=pos_and_chars,
-            gradient_probs=None,
-            n_positions_remaining=len(self.positions_to_mutate),
-        )
 
     # ── Path 3: gradient-guided (GradaBeam) ─────────────────────────────────
 
@@ -636,21 +856,38 @@ class AdaptiveRolloutDesigner:
 
         A node is exhausted when all mutable positions have been edited in the
         current rollout chain (n_positions_remaining == 0).  The counter is O(1)
-        to read; it is decremented each time positions are masked in
-        generate_random_mutant_actionspace.  None means the node is a pre-TISM
-        gradient seed and should be kept (treated as active).
+        to read; it is decremented by the number of distinct positions edited each
+        step (for both L-vector and 3L representations).
+
+        Invariant (verified pre-refactor): every node reaching this method has
+        n_positions_remaining set (never None) — the None case from gradient seed
+        nodes is transient within initialize_roots_with_gradients and is resolved
+        before any node enters a rollout loop.
+
+        The debug assertion validates the counter against whichever representation
+        the node carries:
+          GradientActionStrategy: n_positions_remaining * 3 == (probs > 0).sum()
+          UniformActionStrategy:  n_positions_remaining == (position_weights > 0).sum()
         """
         active, exhausted = [], []
         for n in parent_nodes:
-            assert n.n_positions_remaining is None or (
-                n.probs is not None
-                and n.n_positions_remaining * 3 == int((n.probs > 0).sum())
-            ), (
-                f"n_positions_remaining invariant broken: "
-                f"n_positions_remaining={n.n_positions_remaining}, "
-                f"(probs > 0).sum()={int((n.probs > 0).sum()) if n.probs is not None else 'N/A'}"
+            assert n.n_positions_remaining is not None, (
+                "n_positions_remaining must be set before _filter_exhausted is called. "
+                f"Node: seq={n.seq!r}, edits_since_root={n.edits_since_root}"
             )
-            if n.n_positions_remaining is None or n.n_positions_remaining >= 1:
+            if n.probs is not None:
+                assert n.n_positions_remaining * 3 == int((n.probs > 0).sum()), (
+                    f"n_positions_remaining invariant broken (gradient path): "
+                    f"n_positions_remaining={n.n_positions_remaining}, "
+                    f"(probs > 0).sum()={int((n.probs > 0).sum())}"
+                )
+            elif n.position_weights is not None:
+                assert n.n_positions_remaining == int((n.position_weights > 0).sum()), (
+                    f"n_positions_remaining invariant broken (uniform path): "
+                    f"n_positions_remaining={n.n_positions_remaining}, "
+                    f"(position_weights > 0).sum()={int((n.position_weights > 0).sum())}"
+                )
+            if n.n_positions_remaining >= 1:
                 active.append(n)
             else:
                 exhausted.append(n)
