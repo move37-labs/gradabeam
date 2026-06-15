@@ -135,7 +135,9 @@ class ModelWrapper:
             unseen_fitness = [(i, r) for (i, _), r in zip(unseen_seq, results)]
             results = [x[1] for x in sorted(seen_fitness + unseen_fitness)]
 
-        # Ada* is formulated to maximize fitness, but we want to minimize.
+        # The oracle convention is "lower = better" (e.g. minimizing loss/score),
+        # but the optimizer (AdaBeam/GrAdaBeam) is formulated to maximize fitness.
+        # We negate the raw oracle scores to convert minimization to maximization.
         return [-float(x) for x in results]
 
     def get_tism(
@@ -160,7 +162,17 @@ class ModelWrapper:
         # Use fast tensor-based TISM
         pos_and_chars_to_mutate, logits = self.model.get_tism(sequence, idxs)
 
-        logits *= -1  # Flip the sign, to conform to convention.
+        # Raw TISM logits represent the gradient of the raw oracle score with respect
+        # to the input. Since the raw oracle score is minimized, a positive raw gradient
+        # means a mutation increases the score (makes it worse).
+        #
+        # Because we want to select mutations that decrease the raw score (make it better),
+        # we negate the logits. This ensures that positive logits represent mutations
+        # that improve (decrease) the raw score, which softmax then maps to the highest
+        # selection probabilities.
+        #
+        # Note: This is the gradient-space analog of the scalar score negation in get_fitness.
+        logits *= -1
 
         return (pos_and_chars_to_mutate, logits)
 
