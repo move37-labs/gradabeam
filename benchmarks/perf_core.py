@@ -88,15 +88,20 @@ def measure(
     )
 
     designer_cls: type[GradaBeam] | type[AdaBeam]
-    kwargs: Any
+    kwargs: dict[str, Any]
     if designer_name.lower() == "gradabeam":
         designer_cls = GradaBeam
-        kwargs = gradabeam_kwargs
+        kwargs = dict(gradabeam_kwargs)
     elif designer_name.lower() == "adabeam":
         designer_cls = AdaBeam
-        kwargs = adabeam_kwargs
+        kwargs = dict(adabeam_kwargs)
     else:
         raise ValueError(f"Unknown designer: {designer_name}")
+
+    import inspect
+    sig = inspect.signature(designer_cls.__init__)
+    if "skip_repeat_sequences" in sig.parameters:
+        kwargs["skip_repeat_sequences"] = False
 
     designer = designer_cls(**kwargs)
 
