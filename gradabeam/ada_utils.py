@@ -289,7 +289,7 @@ def generate_random_mutant_actionspace(
     n_edits: int,
     rng: np.random.Generator,
     probs: np.ndarray,
-) -> tuple[str, list[int], np.ndarray, list[float]]:
+) -> tuple[str, list[int], np.ndarray, list[float], int]:
     """Generate a mutant with exactly n_edits distinct position edits in action space.
 
     Uses the Plackett-Luce / marginal+conditional identity for O(3L) cost:
@@ -317,7 +317,11 @@ def generate_random_mutant_actionspace(
             Must be nonnegative; used for both sampling and p_final.
 
     Returns:
-        (mutant_string, selected_action_indices, final_masked_probs, p_final_chosen_list)
+        (mutant_string, selected_action_indices, final_masked_probs,
+         p_final_chosen_list, n_positions_edited)
+        where n_positions_edited is the number of distinct positions whose full
+        3-action slice was zeroed out (== effective_n == len(chosen_positions)).
+        Callers use this to decrement their n_positions_remaining counter.
     """
     assert isinstance(pos_and_chars_to_mutate, list)
     n_actions = len(pos_and_chars_to_mutate)
@@ -413,7 +417,13 @@ def generate_random_mutant_actionspace(
     if total_p > 0:
         current_probs /= total_p
 
-    return "".join(mutant), selected_action_indices, current_probs, p_final_chosen_list
+    return (
+        "".join(mutant),
+        selected_action_indices,
+        current_probs,
+        p_final_chosen_list,
+        effective_n,
+    )
 
 
 def get_batched_fitness(

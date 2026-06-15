@@ -284,7 +284,7 @@ def test_build_uniform_pos_and_chars():
 def test_actionspace_edit_count_invariant(n_edits, seed):
     """Mutant differs from input in exactly n_edits positions."""
     rng = np.random.default_rng(seed)
-    mutant, edited_indices, remaining_probs, p_final_chosen_list = (
+    mutant, edited_indices, remaining_probs, _, _ = (
         ada_utils.generate_random_mutant_actionspace(
             sequence=_SEQUENCE,
             pos_and_chars_to_mutate=_POS_AND_CHARS,
@@ -345,7 +345,7 @@ def test_actionspace_collision_regression():
 
     for seed in range(n_seeds):
         rng = np.random.default_rng(seed)
-        mutant_act, _, _, _ = ada_utils.generate_random_mutant_actionspace(
+        mutant_act, _, _, _, _ = ada_utils.generate_random_mutant_actionspace(
             sequence=sequence,
             pos_and_chars_to_mutate=pos_and_chars,
             n_edits=n_edits,
@@ -383,7 +383,7 @@ def test_actionspace_boundary_exceeds_positions():
     # 12 actions total across 4 positions.
     # Max positions to edit is 4.
     rng = np.random.default_rng(0)
-    mutant, edited_indices, remaining_probs, p_final_chosen_list = (
+    mutant, edited_indices, remaining_probs, p_final_chosen_list, _ = (
         ada_utils.generate_random_mutant_actionspace(
             sequence=sequence,
             pos_and_chars_to_mutate=pos_and_chars,
@@ -440,7 +440,7 @@ def test_actionspace_weights_bias_selection():
     hot_selected = 0
     for seed in range(n_trials):
         rng = np.random.default_rng(seed)
-        _, edited_indices, _, _ = ada_utils.generate_random_mutant_actionspace(
+        _, edited_indices, _, _, _ = ada_utils.generate_random_mutant_actionspace(
             sequence=sequence,
             pos_and_chars_to_mutate=pos_and_chars,
             n_edits=1,
@@ -483,7 +483,7 @@ def test_pfinal_equals_step_start_action_probability():
     probs /= probs.sum()
 
     rng = np.random.default_rng(0)
-    _, sel_idx, _, p_final = ada_utils.generate_random_mutant_actionspace(
+    _, sel_idx, _, p_final, _ = ada_utils.generate_random_mutant_actionspace(
         sequence=sequence,
         pos_and_chars_to_mutate=pos_and_chars,
         n_edits=3,

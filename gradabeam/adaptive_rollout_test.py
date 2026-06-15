@@ -162,6 +162,7 @@ def test_alpha_direction_sanity():
         exploration_alpha=initial_alpha,
         probs=grad_probs.copy(),
         gradient_probs=grad_probs.copy(),
+        n_positions_remaining=6,  # seq has 6 positions, all non-zero
     )
 
     n_avail = 18
@@ -202,6 +203,7 @@ def test_alpha_direction_sanity():
         exploration_alpha=initial_alpha,
         probs=masked_probs,
         gradient_probs=grad_probs.copy(),
+        n_positions_remaining=3,  # positions 3-5 zeroed; 3 positions remain
     )
 
     n_avail_masked = 9
@@ -293,6 +295,7 @@ def test_no_silent_edits_corrected_path():
         probs=np.ones(3 * n, dtype=np.float64) / (3 * n),
         gradient_probs=None,
         pos_and_chars=ada_utils.build_uniform_pos_and_chars(start_seq, list(range(n))),
+        n_positions_remaining=n,
     )
 
     n_trials = 20
@@ -502,6 +505,7 @@ def test_rollout_length_convention():
             pos_and_chars=ada_utils.build_uniform_pos_and_chars(
                 node.seq, list(range(n))
             ),
+            n_positions_remaining=n,
         )
         for node in designer_rej.current_nodes[:2]  # 2 roots
     ]
@@ -552,6 +556,7 @@ def test_alpha_unchanged_on_gradient_free_path():
         probs=np.ones(18) / 18,
         gradient_probs=None,  # gradient-free
         pos_and_chars=ada_utils.build_uniform_pos_and_chars("AAAAAA", list(range(6))),
+        n_positions_remaining=6,
     )
 
     result = designer._compute_child_alpha(
@@ -585,7 +590,7 @@ def test_gradient_picks_base():
     chosen_indices = []
     for seed in range(n_trials):
         rng = np.random.default_rng(seed)
-        _, edited_indices, _, _ = ada_utils.generate_random_mutant_actionspace(
+        _, edited_indices, _, _, _ = ada_utils.generate_random_mutant_actionspace(
             sequence=sequence,
             pos_and_chars_to_mutate=pos_and_chars,
             n_edits=1,
@@ -617,7 +622,7 @@ def test_adabeam_is_gradabeam_gradients_off():
     start_seq = "ACGTACGT"
     pos_and_chars = ada_utils.build_uniform_pos_and_chars(start_seq, list(range(8)))
 
-    _, _, _, p_final_chosen_list = ada_utils.generate_random_mutant_actionspace(
+    _, _, _, p_final_chosen_list, _ = ada_utils.generate_random_mutant_actionspace(
         sequence=start_seq,
         pos_and_chars_to_mutate=pos_and_chars,
         n_edits=2,
@@ -701,6 +706,7 @@ def test_alpha_base_coupling():
         exploration_alpha=initial_alpha,
         probs=grad_probs.copy(),
         gradient_probs=grad_probs.copy(),
+        n_positions_remaining=6,  # seq has 6 positions, all non-zero
     )
 
     # Both scenarios choose position 0. The difference is the BASE.
@@ -742,7 +748,7 @@ def test_positional_mask_zeroes_whole_position():
 
     for seed in range(50):
         rng = np.random.default_rng(seed)
-        _, edited_indices, remaining_probs, _ = (
+        _, edited_indices, remaining_probs, _, _ = (
             ada_utils.generate_random_mutant_actionspace(
                 sequence=sequence,
                 pos_and_chars_to_mutate=pos_and_chars,

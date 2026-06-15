@@ -59,6 +59,12 @@ class RolloutNodeWithProbs(ada_utils.RolloutNode):
         3L vector of pure-gradient action probabilities from the most recent TISM
         call, before any masking or mixing. Used to recompute P_final for the α-update.
         None for the corrected gradient-free path.
+    n_positions_remaining : int or None
+        Number of mutable positions whose 3-action slice in `probs` is still non-zero.
+        Maintained as an O(1) counter so that exhaustion checks and the α-update avoid
+        scanning the full 9000-element probs array each call.
+        Invariant: n_positions_remaining * 3 == (probs > 0).sum() whenever probs is not
+        None.  None iff probs is None (gradient seed node, pre-TISM).
     """
 
     probs: np.ndarray | None = field(default=None, hash=False, compare=False)
@@ -71,6 +77,9 @@ class RolloutNodeWithProbs(ada_utils.RolloutNode):
     )
     exploration_alpha: float = dataclasses.field(default=0.5, compare=False, hash=False)
     gradient_probs: np.ndarray | None = field(default=None, hash=False, compare=False)
+    n_positions_remaining: int | None = dataclasses.field(
+        default=None, compare=False, hash=False
+    )
 
     @property
     def sort_key(self) -> tuple:
@@ -263,6 +272,7 @@ class AdaptiveRolloutDesigner:
             mutations_per_sequence=float(mutations_per_sequence),
             exploration_alpha=float(self.exploration_alpha),
             gradient_probs=None,
+            n_positions_remaining=None,
         )
         initialized_roots = self.initialize_roots_with_gradients(
             [seed_node] * beam_size
@@ -316,6 +326,7 @@ class AdaptiveRolloutDesigner:
             probs=init_probs,
             pos_and_chars=pos_and_chars,
             gradient_probs=None,
+            n_positions_remaining=len(self.positions_to_mutate),
         )
         num_edit_locs = [int(x) for x in self.num_mutations_sampler.sample(beam_size)]
         self.current_nodes = []
@@ -521,6 +532,7 @@ class AdaptiveRolloutDesigner:
             probs=init_probs,
             pos_and_chars=pos_and_chars,
             gradient_probs=None,
+            n_positions_remaining=len(self.positions_to_mutate),
         )
 
     # ── Path 3: gradient-guided (GradaBeam) ─────────────────────────────────
@@ -623,11 +635,22 @@ class AdaptiveRolloutDesigner:
         """Split nodes into (active, exhausted) by their available-position count.
 
         A node is exhausted when all mutable positions have been edited in the
-        current rollout chain (all action probabilities are zero).
+        current rollout chain (n_positions_remaining == 0).  The counter is O(1)
+        to read; it is decremented each time positions are masked in
+        generate_random_mutant_actionspace.  None means the node is a pre-TISM
+        gradient seed and should be kept (treated as active).
         """
         active, exhausted = [], []
         for n in parent_nodes:
-            if n.probs is None or int((n.probs > 0).sum()) >= 1:
+            assert n.n_positions_remaining is None or (
+                n.probs is not None
+                and n.n_positions_remaining * 3 == int((n.probs > 0).sum())
+            ), (
+                f"n_positions_remaining invariant broken: "
+                f"n_positions_remaining={n.n_positions_remaining}, "
+                f"(probs > 0).sum()={int((n.probs > 0).sum()) if n.probs is not None else 'N/A'}"
+            )
+            if n.n_positions_remaining is None or n.n_positions_remaining >= 1:
                 active.append(n)
             else:
                 exhausted.append(n)
@@ -663,6 +686,7 @@ class AdaptiveRolloutDesigner:
         new_probs_list: list[np.ndarray] = []
         child_alphas: list[float] = []
         effective_edits: list[int] = []
+        n_positions_edited_list: list[int] = []
 
         for node, n_edits in zip(nodes, num_edit_locs):
             assert node.probs is not None, (
@@ -673,19 +697,24 @@ class AdaptiveRolloutDesigner:
             )
 
             # Sequential action-space mutation with position-level masking
-            mutant_seq, selected_idx, masked_probs, p_final_chosen_list = (
-                ada_utils.generate_random_mutant_actionspace(
-                    sequence=node.seq,
-                    pos_and_chars_to_mutate=node.pos_and_chars,
-                    n_edits=n_edits,
-                    rng=self.rng,
-                    probs=node.probs,
-                )
+            (
+                mutant_seq,
+                selected_idx,
+                masked_probs,
+                p_final_chosen_list,
+                n_positions_edited,
+            ) = ada_utils.generate_random_mutant_actionspace(
+                sequence=node.seq,
+                pos_and_chars_to_mutate=node.pos_and_chars,
+                n_edits=n_edits,
+                rng=self.rng,
+                probs=node.probs,
             )
 
             seqs.append(mutant_seq)
             new_probs_list.append(masked_probs)
             effective_edits.append(len(selected_idx))
+            n_positions_edited_list.append(n_positions_edited)
 
             # α-posterior update (measures joint surprise over action space)
             child_alpha = self._compute_child_alpha(
@@ -706,8 +735,12 @@ class AdaptiveRolloutDesigner:
                 mutations_per_sequence=new_rate,
                 exploration_alpha=child_alpha,
                 gradient_probs=node.gradient_probs,
+                n_positions_remaining=(
+                    node.n_positions_remaining or len(self.positions_to_mutate)
+                )
+                - n_pos_edited,
             )
-            for seq, f, node, n_eff, new_rate, child_alpha, new_probs in zip(
+            for seq, f, node, n_eff, new_rate, child_alpha, new_probs, n_pos_edited in zip(
                 seqs,
                 fitnesses,
                 nodes,
@@ -715,6 +748,7 @@ class AdaptiveRolloutDesigner:
                 new_rates,
                 child_alphas,
                 new_probs_list,
+                n_positions_edited_list,
             )
         ]
 
@@ -737,8 +771,13 @@ class AdaptiveRolloutDesigner:
             return float(node.exploration_alpha)
 
         assert node.probs is not None
-        n_avail = int((node.probs > 0).sum())
-        assert n_avail >= 1, "No available actions for α update."
+        assert (
+            node.n_positions_remaining is not None and node.n_positions_remaining >= 1
+        ), (
+            f"n_positions_remaining must be a positive integer here, "
+            f"got {node.n_positions_remaining!r}"
+        )
+        n_avail = node.n_positions_remaining * 3  # actions = 3 per position
 
         p_uniform = 1.0 / n_avail
         alpha = node.exploration_alpha
@@ -788,6 +827,7 @@ class AdaptiveRolloutDesigner:
                     mutations_per_sequence=node.mutations_per_sequence,
                     exploration_alpha=node.exploration_alpha,
                     gradient_probs=gradient_probs,
+                    n_positions_remaining=len(self.positions_to_mutate),
                 )
             )
 

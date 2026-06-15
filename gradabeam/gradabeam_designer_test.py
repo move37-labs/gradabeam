@@ -160,6 +160,7 @@ class TestGradientAlignment:
             probs=None,
             gradient_probs=None,
             pos_and_chars=None,
+            n_positions_remaining=None,
         )
         nodes = gb.initialize_roots_with_gradients([explicit_root])
         root = nodes[0]
