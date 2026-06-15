@@ -890,6 +890,144 @@ def test_pbt_clamp_keeps_mu_strictly_below_one():
     assert mu < 1.0, f"mu = {mu} must be < 1.0 after clamp"
 
 
+def test_pbt_clamp_perturb_keeps_mu_strictly_below_one():
+    """Perturb mode: 1.2x perturbation on a near-maximum rate must be clamped.
+
+    Sets current_rate = L - 1 (the highest valid inherited rate) so that
+    1.2 * (L-1) would equal or exceed L if unclamped. Runs 100 draws, which
+    statistically guarantees the 1.2x branch fires at least once
+    (P(never in 100) ≈ 2.7e-5 given p=0.10). Asserts the clamp holds for
+    every draw. No sampler patch needed: perturb derives new_rate from
+    current_rate, not from the sampler output.
+    """
+    model = testing_utils.CountLetterModel()
+    L = 6
+    designer = AdaptiveRolloutDesigner(
+        model_fn=model,
+        start_sequence="AAAAAA",
+        mutations_per_sequence=L - 1,  # 1.2 * (L-1) = 6.0 = L if unclamped
+        beam_size=2,
+        n_rollouts_per_root=1,
+        eval_batch_size=1,
+        rng_seed=0,
+        strategy=GradientActionStrategy(),
+        use_gradients=True,
+        use_pbt=True,
+        pbt_rate_rule="perturb",
+        exploration_alpha=0.5,
+    )
+
+    node = designer.current_nodes[0]
+    assert node.mutations_per_sequence == L - 1
+
+    max_rate = max(1.0, L - 1)
+    for _ in range(100):
+        _, new_rate = designer._get_next_mutation_params(node)
+        assert new_rate <= max_rate, (
+            f"Perturb clamp failed: new_rate={new_rate} > max_rate={max_rate} "
+            f"(L={L}). mu = new_rate/L = {new_rate / L:.4f} would be >= 1."
+        )
+        mu = new_rate / L
+        assert mu < 1.0, f"mu = {mu:.6f} must be strictly < 1.0 after clamp"
+
+
+def test_perturbation_ratio_distribution():
+    """Perturb mode: new_rate / current_rate must be ≈ {0.8: 10%, 1.0: 80%, 1.2: 10%}.
+
+    Also confirms that new_rate tracks current_rate (not n_edits): node rate is
+    3.0, so the only valid outputs are 2.4, 3.0, 3.6. Any other value means
+    n_edits leaked into new_rate.
+
+    Uses L=20 so the clamp never binds for rate=3.0 (1.2*3.0 = 3.6 << 19).
+    """
+    model = testing_utils.CountLetterModel()
+    designer = AdaptiveRolloutDesigner(
+        model_fn=model,
+        start_sequence="A" * 20,
+        mutations_per_sequence=3,
+        beam_size=2,
+        n_rollouts_per_root=1,
+        eval_batch_size=1,
+        rng_seed=12345,
+        strategy=GradientActionStrategy(),
+        use_gradients=True,
+        use_pbt=True,
+        pbt_rate_rule="perturb",
+        exploration_alpha=0.5,
+    )
+
+    node = designer.current_nodes[0]
+    current_rate = float(node.mutations_per_sequence)  # 3.0
+    assert current_rate == 3.0
+
+    n_calls = 5000
+    ratios: list[float] = []
+    for _ in range(n_calls):
+        _, new_rate = designer._get_next_mutation_params(node)
+        ratios.append(new_rate / current_rate)
+
+    # Round to 9 decimal places before classifying: 0.8*3.0/3.0 and 1.2*3.0/3.0 are
+    # not bit-exact due to floating point, but round cleanly to {0.8, 1.0, 1.2}.
+    rounded_ratios = [round(r, 9) for r in ratios]
+
+    # Only {0.8, 1.0, 1.2} are valid — any other value means n_edits leaked.
+    allowed = {round(0.8, 9), round(1.0, 9), round(1.2, 9)}
+    for r, rr in zip(ratios, rounded_ratios):
+        assert rr in allowed, (
+            f"Unexpected ratio {r:.9f} (rounded {rr}). Only 0.8, 1.0, 1.2 are valid; "
+            "another value means n_edits leaked into new_rate."
+        )
+
+    tol = 0.03
+    frac_08 = rounded_ratios.count(round(0.8, 9)) / n_calls
+    frac_10 = rounded_ratios.count(round(1.0, 9)) / n_calls
+    frac_12 = rounded_ratios.count(round(1.2, 9)) / n_calls
+    assert abs(frac_08 - 0.10) < tol, f"0.8x fraction {frac_08:.4f} not near 0.10"
+    assert abs(frac_12 - 0.10) < tol, f"1.2x fraction {frac_12:.4f} not near 0.10"
+    assert abs(frac_10 - 0.80) < tol, f"1.0x fraction {frac_10:.4f} not near 0.80"
+
+
+def test_pbt_rate_rule_validation():
+    """Constructing with an invalid pbt_rate_rule must raise ValueError."""
+    model = testing_utils.CountLetterModel()
+    with pytest.raises(ValueError, match="pbt_rate_rule must be"):
+        AdaptiveRolloutDesigner(
+            model_fn=model,
+            start_sequence="AAAAAA",
+            mutations_per_sequence=1,
+            beam_size=2,
+            n_rollouts_per_root=1,
+            eval_batch_size=1,
+            rng_seed=0,
+            strategy=GradientActionStrategy(),
+            use_gradients=True,
+            use_pbt=True,
+            pbt_rate_rule="invalid",
+            exploration_alpha=0.5,
+        )
+
+
+def test_snap_is_default():
+    """A designer built without pbt_rate_rule defaults to 'snap'."""
+    model = testing_utils.CountLetterModel()
+    designer = AdaptiveRolloutDesigner(
+        model_fn=model,
+        start_sequence="AAAAAA",
+        mutations_per_sequence=1,
+        beam_size=2,
+        n_rollouts_per_root=1,
+        eval_batch_size=1,
+        rng_seed=0,
+        strategy=GradientActionStrategy(),
+        use_gradients=True,
+        use_pbt=True,
+        exploration_alpha=0.5,
+    )
+    assert designer.pbt_rate_rule == "snap", (
+        f"Expected default pbt_rate_rule='snap', got {designer.pbt_rate_rule!r}"
+    )
+
+
 def test_gradabeam_trajectory_bitforbit():
     """GradaBeam trajectory must be bit-for-bit identical before and after the
     position-space UniformActionStrategy refactor.

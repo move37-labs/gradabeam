@@ -224,6 +224,17 @@ def _build_parser() -> argparse.ArgumentParser:
         metavar="BOOL",
         help="Enable Population Based Training for adaptive mutation rate. Required for gradabeam.",
     )
+    gb.add_argument(
+        "--pbt_rate_rule",
+        type=str,
+        choices=["snap", "perturb"],
+        default="snap",
+        help=(
+            "PBT mutation-rate update rule: 'snap' (default) sets child rate to the "
+            "sampled edit count; 'perturb' applies the paper §4.3.1 multiplicative "
+            "perturbation (×0.8 or ×1.2, 10%% each)."
+        ),
+    )
 
     return p
 
@@ -298,6 +309,7 @@ def main(argv=None):
             else 0.10,
             max_logit=args.max_logit if args.max_logit is not None else 3.0,
             use_pbt=args.use_pbt,
+            pbt_rate_rule=args.pbt_rate_rule,
         )
     elif args.optimizer == "adabeam":
         optimizer = AdaBeam(**shared_kwargs)

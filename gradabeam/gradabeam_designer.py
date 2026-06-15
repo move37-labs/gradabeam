@@ -45,6 +45,7 @@ class GradaBeam(AdaptiveRolloutDesigner):
         n_rollouts_per_root: int,
         exploration_alpha: float,
         use_pbt: bool,
+        pbt_rate_rule: str = "snap",
         max_rollout_len: int = 200,
         gradient_prob_cap: float = 0.10,
         max_logit: float = 3.0,
@@ -64,6 +65,9 @@ class GradaBeam(AdaptiveRolloutDesigner):
             exploration_alpha: Initial α (0=pure gradient, 1=pure uniform).
             use_pbt: Enable Population Based Training for adaptive mutation
                 rate and α.
+            pbt_rate_rule: Rate-update rule when use_pbt=True. 'snap' (default)
+                sets child rate to the sampled edit count; 'perturb' applies the
+                paper §4.3.1 multiplicative perturbation (×0.8 or ×1.2, 10% each).
             max_rollout_len: Maximum rollout depth.
             gradient_prob_cap: Per-action probability cap after softmax.
             max_logit: Dynamic temperature ceiling for logit scaling.
@@ -87,6 +91,7 @@ class GradaBeam(AdaptiveRolloutDesigner):
             strategy=GradientActionStrategy(),
             use_gradients=True,
             use_pbt=use_pbt,
+            pbt_rate_rule=pbt_rate_rule,
             exploration_alpha=exploration_alpha,
             gradient_prob_cap=gradient_prob_cap,
             max_logit=max_logit,

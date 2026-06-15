@@ -346,6 +346,7 @@ class AdaptiveRolloutDesigner:
         strategy: UniformActionStrategy | GradientActionStrategy,
         use_gradients: bool,
         use_pbt: bool,
+        pbt_rate_rule: str = "snap",
         exploration_alpha: float = 0.5,
         gradient_prob_cap: float = 0.10,
         max_logit: float = 3.0,
@@ -385,8 +386,13 @@ class AdaptiveRolloutDesigner:
         # designer methods (_compute_child_alpha) without relocating that logic.
         if isinstance(strategy, GradientActionStrategy):
             strategy._set_designer(self)
+        if pbt_rate_rule not in ("snap", "perturb"):
+            raise ValueError(
+                f"pbt_rate_rule must be 'snap' or 'perturb', got {pbt_rate_rule!r}"
+            )
         self.use_gradients = use_gradients
         self.use_pbt = use_pbt
+        self.pbt_rate_rule = pbt_rate_rule
         self.exploration_alpha = exploration_alpha
         self.gradient_prob_cap = gradient_prob_cap
         self.max_logit = max_logit
@@ -899,12 +905,26 @@ class AdaptiveRolloutDesigner:
         current_rate = node.mutations_per_sequence
         n_edits = int(self.get_sampler(current_rate).sample(1)[0])
         if self.use_pbt:
-            # Cap strictly below L so mu = new_rate/L < 1, preventing _F_inverse
-            # blow-up.  L-1 is exact (no float fudge) and L >= 2 is guaranteed by
-            # the construction assert (mutations_per_sequence < L, and
-            # mutations_per_sequence >= 1 implies L >= 2).
-            _max_rate = len(self.positions_to_mutate) - 1
-            new_rate = float(np.clip(n_edits, 1.0, _max_rate))
+            # max(1.0, L-1): construction asserts L >= 2, so this always equals L-1;
+            # the max guards the L<=2 edge should that assertion ever relax.
+            _max_rate = max(1.0, len(self.positions_to_mutate) - 1)
+            if self.pbt_rate_rule == "snap":
+                # Current shipped behavior: child rate snaps to the sampled edit count.
+                new_rate = float(np.clip(n_edits, 1.0, _max_rate))
+            else:  # "perturb" — paper §4.3.1
+                # Perturb the INHERITED rate multiplicatively. RNG is consumed ONLY
+                # here so the snap path's stream is bit-for-bit identical to HEAD.
+                # mutations_per_sequence is the expected edit count (rate);
+                # mu = rate / L. The ×{0.8, 1.2} scales rate, equivalently µ.
+                p_perturb = 0.20
+                r = self.rng.random()
+                if r < p_perturb / 2:
+                    new_rate = 0.8 * current_rate
+                elif r < p_perturb:
+                    new_rate = 1.2 * current_rate
+                else:
+                    new_rate = current_rate
+                new_rate = float(np.clip(new_rate, 1.0, _max_rate))
         else:
             new_rate = current_rate
         return n_edits, new_rate
