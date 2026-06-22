@@ -1,13 +1,27 @@
 version: 2
 updates:
-  # Maintain dependencies for GitHub Actions
+  # Maintain dependencies for GitHub Actions (branch: main)
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "weekly"
 
-  # Maintain Python dependencies defined in pyproject.toml
+  # Maintain Python dependencies defined in pyproject.toml (branch: main)
   - package-ecosystem: "pip"
     directory: "/"
     schedule:
       interval: "weekly"
+
+  # Maintain dependencies for GitHub Actions (branch: gradabeam_v2)
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    target-branch: "gradabeam_v2"
+
+  # Maintain Python dependencies defined in pyproject.toml (branch: gradabeam_v2)
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    target-branch: "gradabeam_v2"
