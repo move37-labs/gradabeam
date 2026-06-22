@@ -81,7 +81,7 @@ jobs:
 
               Explicitly DO NOT comment on: Core mathematical algorithms/heuristics, PBT sampling formulas, or PyTorch autograd internals. Focus on package structure, public contracts, and CI.
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
  
       # Find the PR to review and write its diff and metadata to files
       # that Gemini can read.
