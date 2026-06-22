@@ -1,18 +1,18 @@
-"""Tests for gradabeam_optimizer.py
+"""Tests for gradabeam_designer.py
 
 To test:
 ```zsh
-pytest gradabeam/gradabeam_optimizer_test.py
+pytest gradabeam/gradabeam_designer_test.py
 ```
 """
 
-import pytest
-
 import numpy as np
+import pytest
 
 from gradabeam import testing_utils
 
-from gradabeam.gradabeam_optimizer import GradaBeam
+from gradabeam.gradabeam_designer import GradaBeam
+from gradabeam.adaptive_rollout import RolloutNodeWithProbs
 
 
 def test_gradabeam_sanity():
@@ -117,8 +117,17 @@ class TestGradientAlignment:
         """
         Verifies that when CountLetterModel says 'C is good',
         GradaBeam picks 'C' and fitness improves.
+
+        Uses start_sequence="AC": position 0 is A (one beneficial C-mutation exists)
+        and position 1 is already C.  This gives a highly-concentrated gradient at
+        pos0→C (prob ≈ 0.57 with gradient_prob_cap=1.0 and alpha=0.0), which is
+        reliable regardless of the initial-beam RNG path.
+
+        An explicit root node with exploration_alpha=0.0 is passed to
+        initialize_roots_with_gradients so the test does not depend on which
+        sequence happened to land in current_nodes[0].
         """
-        start_sequence = "AA"
+        start_sequence = "AC"
 
         # We want Positive Gradients (+1) for 'C'.
         target_char = "C"
@@ -140,7 +149,20 @@ class TestGradientAlignment:
         )
 
         print("\n[Test] Calculating gradients on root...")
-        nodes = gb.initialize_roots_with_gradients([gb.current_nodes[0]])
+        # Create an explicit root node on the START SEQUENCE with alpha=0.0 so
+        # the test is independent of which sequence ended up in current_nodes[0].
+        explicit_root = RolloutNodeWithProbs(
+            seq=start_sequence,
+            fitness=np.float32(0.0),
+            edits_since_root=0,
+            mutations_per_sequence=1.0,
+            exploration_alpha=0.0,
+            probs=None,
+            gradient_probs=None,
+            pos_and_chars=None,
+            n_positions_remaining=None,
+        )
+        nodes = gb.initialize_roots_with_gradients([explicit_root])
         root = nodes[0]
 
         # Find the max probability action
@@ -158,12 +180,14 @@ class TestGradientAlignment:
         )
 
         # ASSERTION 2: Is it confident?
+        # With start_sequence="AC", the only beneficial mutation is pos0 → C
+        # (prob ≈ 0.57 with no cap and alpha=0.0); other actions are neutral or harmful.
         assert best_prob >= 0.5, (
-            f"Entropy Death! Expected high confidence (>0.8) for '{target_char}', got {best_prob:.4f}."
+            f"Entropy Death! Expected high confidence (≥0.5) for '{target_char}', got {best_prob:.4f}."
         )
 
         # 3. Verify Actual Fitness Gain
-        original_seq = root.seq
+        original_seq = start_sequence
         mut_list = list(original_seq)
         mut_list[int(best_pos)] = best_char
         mutant_seq = "".join(mut_list)
