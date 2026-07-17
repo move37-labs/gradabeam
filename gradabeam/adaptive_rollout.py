@@ -133,18 +133,6 @@ class RolloutNodeWithProbs(ada_utils.RolloutNode):
         default=None, compare=False, hash=False
     )
 
-    @property
-    def sort_key(self) -> tuple:
-        """Deterministic total ordering; id(self) breaks rare float-ties."""
-        return (
-            self.fitness,
-            self.seq,
-            self.edits_since_root,
-            self.mutations_per_sequence,
-            self.exploration_alpha,
-            id(self),
-        )
-
 
 # ---------------------------------------------------------------------------
 # Strategy objects
@@ -629,9 +617,9 @@ class AdaptiveRolloutDesigner:
         print("=" * 62)
 
     def get_samples(self, n_samples: int) -> list[str]:
-        sorted_nodes = sorted(
-            self.current_nodes, key=lambda x: (x.fitness, x.seq), reverse=True
-        )
+        seq_list = sorted(self.current_nodes, key=lambda x: x.seq)
+        self.rng.shuffle(seq_list)
+        sorted_nodes = sorted(seq_list, key=lambda x: x.fitness, reverse=True)
         return [x.seq for x in sorted_nodes[:n_samples]]
 
     def get_batched_fitness(self, sequences: list[str]) -> np.ndarray:
@@ -755,7 +743,9 @@ class AdaptiveRolloutDesigner:
         if not nodes_visited:
             raise ValueError("No nodes generated.")
 
-        sorted_nodes = sorted(nodes_visited, key=lambda x: x.sort_key, reverse=True)
+        seq_list = sorted(nodes_visited, key=lambda x: x.seq)
+        self.rng.shuffle(seq_list)
+        sorted_nodes = sorted(seq_list, key=lambda x: x.fitness, reverse=True)
         self.last_all_proposals = [
             {"seq": n.seq, "fitness": float(n.fitness)} for n in sorted_nodes
         ]
@@ -792,7 +782,9 @@ class AdaptiveRolloutDesigner:
         if not nodes_visited:
             raise ValueError("No nodes generated.")
 
-        sorted_nodes = sorted(nodes_visited, key=lambda x: x.sort_key, reverse=True)
+        seq_list = sorted(nodes_visited, key=lambda x: x.seq)
+        self.rng.shuffle(seq_list)
+        sorted_nodes = sorted(seq_list, key=lambda x: x.fitness, reverse=True)
         self.last_all_proposals = [
             {"seq": n.seq, "fitness": float(n.fitness)} for n in sorted_nodes
         ]

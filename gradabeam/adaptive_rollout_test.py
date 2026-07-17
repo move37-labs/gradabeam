@@ -1030,9 +1030,9 @@ def test_snap_is_default():
 
 def test_gradabeam_trajectory_bitforbit():
     """GradaBeam trajectory must be bit-for-bit identical before and after the
-    position-space UniformActionStrategy refactor.
+    fitness tie-breaking fix (rng.shuffle before stable fitness sort).
 
-    Golden values captured on commit 8d90703 (pre-refactor) by running:
+    Golden values re-captured after the tie-breaking fix by running:
         python -c "
         from gradabeam import testing_utils
         from gradabeam.adaptive_rollout import AdaptiveRolloutDesigner, GradientActionStrategy
@@ -1058,31 +1058,31 @@ def test_gradabeam_trajectory_bitforbit():
     GOLDEN = [
         # step 0
         [
+            ("ACGAACCC", 4.0, 0.3566751843, 2.0),
             ("CCAAACCC", 5.0, 0.3046075801, 2.0),
             ("CCAGACCC", 5.0, 0.3134616055, 1.0),
-            ("CCAGGCAC", 4.0, 0.3413592515, 2.0),
             ("CTCCCTAC", 5.0, 0.5027434518, 3.0),
         ],
         # step 1
         [
             ("CCCGACCC", 6.0, 0.1232249424, 1.0),
             ("CCCGCCCC", 7.0, 0.0433671781, 1.0),
-            ("CCCGCCCG", 6.0, 0.0585061034, 1.0),
-            ("CCCTTCCC", 6.0, 0.098138035, 1.0),
+            ("CCCGGCCC", 6.0, 0.0830782861, 1.0),
+            ("CCGCACCC", 6.0, 0.1737399254, 2.0),
         ],
         # step 2
         [
             ("CCCACCCC", 7.0, 0.0108428624, 1.0),
-            ("CCCCCCCC", 8.0, 0.0161492341, 2.0),
-            ("CCCTCCCC", 7.0, 0.0108428624, 1.0),
-            ("CCCTCGCC", 6.0, 0.0108428623, 1.0),
+            ("CCCTCCCC", 7.0, 0.0485014264, 2.0),
+            ("CCCTGCCC", 6.0, 0.0403369831, 1.0),
+            ("CCTACCCC", 6.0, 0.0473128292, 2.0),
         ],
         # step 3
         [
-            ("CCCCCACC", 7.0, 0.01, 1.0),
+            ("CCCACGCC", 6.0, 0.0216332071, 1.0),
             ("CCCCCCCC", 8.0, 0.01, 1.0),
-            ("CCTCCCCC", 7.0, 0.0118450783, 2.0),
-            ("CCTCCCCC", 7.0, 0.016149234, 1.0),
+            ("CCGCCCCC", 7.0, 0.01, 1.0),
+            ("CGCACCCC", 6.0, 0.0216332071, 1.0),
         ],
     ]
 
