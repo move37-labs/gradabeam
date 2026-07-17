@@ -130,3 +130,37 @@ def test_eval_batch_size_consistency():
     assert np.array_equal(scores1, scores2)
     assert np.array_equal(scores1, scores4)
     assert np.array_equal(scores2, scores4)
+
+
+def test_adabeam_determinism_and_diversity():
+    """Test that runs with the same seed are deterministic and different seeds produce different diversity."""
+    model_fn = testing_utils.CountLetterModel()
+    start_seq = "A" * 100
+
+    kwargs1 = AdaBeam.debug_init_args()
+    kwargs1["model_fn"] = model_fn
+    kwargs1["start_sequence"] = start_seq
+    kwargs1["rng_seed"] = 42
+    adabeam1 = AdaBeam(**kwargs1)
+    adabeam1.run(n_steps=3)
+    out1 = adabeam1.get_samples(10)
+
+    kwargs2 = AdaBeam.debug_init_args()
+    kwargs2["model_fn"] = model_fn
+    kwargs2["start_sequence"] = start_seq
+    kwargs2["rng_seed"] = 42
+    adabeam2 = AdaBeam(**kwargs2)
+    adabeam2.run(n_steps=3)
+    out2 = adabeam2.get_samples(10)
+
+    assert out1 == out2
+
+    kwargs3 = AdaBeam.debug_init_args()
+    kwargs3["model_fn"] = model_fn
+    kwargs3["start_sequence"] = start_seq
+    kwargs3["rng_seed"] = 43
+    adabeam3 = AdaBeam(**kwargs3)
+    adabeam3.run(n_steps=3)
+    out3 = adabeam3.get_samples(10)
+
+    assert out1 != out3
