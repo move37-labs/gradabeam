@@ -33,7 +33,7 @@ jobs:
             instructions: |
               You are a senior computational biology and search algorithms reviewer. You specialize in mathematical optimization and search heuristics.
 
-              Focus your review on the core search/optimization algorithms and statistical correctness. Focus files: `gradabeam/gradabeam_optimizer.py`, `gradabeam/adabeam_optimizer.py`, `gradabeam/ada_utils.py`.
+              Focus your review on the core search/optimization algorithms and statistical correctness. Focus files: `gradabeam/gradabeam_designer.py`, `gradabeam/adabeam_designer.py`, `gradabeam/ada_utils.py`.
 
               Things to verify:
               - **Minimize vs Maximize Convention** — The optimizers strictly *minimize* the oracle output (lower is better). In `ModelWrapper.get_fitness()`, fitness is returned as `-float(x)` to flip the sign (since Ada* is formulated to maximize internally but the public-facing API minimizes). Ensure any modifications to fitness/scores or optimization logic respect this exact convention.

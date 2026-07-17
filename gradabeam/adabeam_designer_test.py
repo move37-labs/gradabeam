@@ -2,7 +2,7 @@
 
 To test:
 ```zsh
-pytest gradabeam/adabeam_optimizer_test.py
+pytest gradabeam/adabeam_designer_test.py
 ```
 """
 
@@ -10,12 +10,11 @@ import pytest
 import numpy as np
 import random
 
-from gradabeam.adabeam_optimizer import AdaBeam
+from gradabeam.adabeam_designer import AdaBeam
 from gradabeam import testing_utils
 
 
-@pytest.mark.parametrize("skip_repeat_sequences", [True, False])
-def test_adabeam_sanity(skip_repeat_sequences):
+def test_adabeam_sanity():
     model_fn = testing_utils.CountLetterModel()
 
     start_seq = "A" * 100
@@ -27,7 +26,6 @@ def test_adabeam_sanity(skip_repeat_sequences):
     kwargs["model_fn"] = model_fn
     kwargs["start_sequence"] = start_seq
     kwargs["beam_size"] = beam_size
-    kwargs["skip_repeat_sequences"] = skip_repeat_sequences
     adabeam = AdaBeam(**kwargs)
 
     adabeam.run(n_steps=2)
@@ -46,7 +44,6 @@ def test_adabeam_convergence():
     kwargs = AdaBeam.debug_init_args()
     kwargs["model_fn"] = model_fn
     kwargs["start_sequence"] = start_seq
-    kwargs["skip_repeat_sequences"] = True
     adabeam = AdaBeam(**kwargs)
 
     adabeam.run(n_steps=2)
@@ -69,7 +66,6 @@ def test_positions_to_mutate():
     kwargs = AdaBeam.debug_init_args()
     kwargs["model_fn"] = model_fn
     kwargs["start_sequence"] = start_seq
-    kwargs["skip_repeat_sequences"] = True
     kwargs["beam_size"] = beam_size
     adabeam = AdaBeam(**kwargs, positions_to_mutate=list(range(20)))
 

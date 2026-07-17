@@ -49,8 +49,8 @@ import inspect
 import time
 
 from gradabeam import argparse_lib
-from gradabeam.gradabeam_optimizer import GradaBeam
-from gradabeam.adabeam_optimizer import AdaBeam
+from gradabeam.gradabeam_designer import GradaBeam
+from gradabeam.adabeam_designer import AdaBeam
 
 
 _OPTIMIZERS = {
@@ -224,17 +224,16 @@ def _build_parser() -> argparse.ArgumentParser:
         metavar="BOOL",
         help="Enable Population Based Training for adaptive mutation rate. Required for gradabeam.",
     )
-
-    # ------------------------------------------------------------------ #
-    # AdaBeam-only args                                                    #
-    # ------------------------------------------------------------------ #
-    ab = p.add_argument_group("AdaBeam-only options (ignored for gradabeam)")
-    ab.add_argument(
-        "--skip_repeat_sequences",
-        type=argparse_lib.str_to_bool,
-        default=None,
-        metavar="BOOL",
-        help="Skip sequences already evaluated during rollouts. [default: False]",
+    gb.add_argument(
+        "--pbt_rate_rule",
+        type=str,
+        choices=["snap", "perturb"],
+        default="snap",
+        help=(
+            "PBT mutation-rate update rule: 'snap' (default) sets child rate to the "
+            "sampled edit count; 'perturb' applies the paper §4.3.1 multiplicative "
+            "perturbation (×0.8 or ×1.2, 10%% each)."
+        ),
     )
 
     return p
@@ -310,14 +309,10 @@ def main(argv=None):
             else 0.10,
             max_logit=args.max_logit if args.max_logit is not None else 3.0,
             use_pbt=args.use_pbt,
+            pbt_rate_rule=args.pbt_rate_rule,
         )
     elif args.optimizer == "adabeam":
-        optimizer = AdaBeam(
-            **shared_kwargs,
-            skip_repeat_sequences=args.skip_repeat_sequences
-            if args.skip_repeat_sequences is not None
-            else False,
-        )
+        optimizer = AdaBeam(**shared_kwargs)
     else:
         parser.error(f"Unknown optimizer: {args.optimizer}")
 
