@@ -199,10 +199,12 @@ class AdaBeam:
     def get_samples(self, n_samples: int) -> list[str]:
         """Get samples."""
         limit = min(n_samples, len(self.current_nodes))
-        # Break fitness ties using sequence string to ensure deterministic behavior.
-        sorted_nodes = sorted(
-            self.current_nodes, key=lambda x: (x.fitness, x.seq), reverse=True
-        )
+        # Shuffle nodes deterministically using self.rng before stable sort
+        seq_list = list(self.current_nodes)
+        self.rng.shuffle(seq_list)
+
+        # Sort stably by fitness; ties will retain their randomized order
+        sorted_nodes = sorted(seq_list, key=lambda x: x.fitness, reverse=True)
         return [x.seq for x in sorted_nodes][:limit]
 
     def propose_sequences(self, root_nodes: list[RolloutNode]) -> list[RolloutNode]:
@@ -253,11 +255,12 @@ class AdaBeam:
         if len(sequences) == 0:
             raise ValueError("No sequences generated.")
 
-        # Propose the top `self.beam_size` new sequences we have generated.
-        # Break fitness ties using sequence string to ensure deterministic behavior.
-        sorted_sequences = sorted(
-            sequences, key=lambda x: (x.fitness, x.seq), reverse=True
-        )
+        # Convert the set to a list and deterministically shuffle it
+        seq_list = list(sequences)
+        self.rng.shuffle(seq_list)
+
+        # Sort stably by fitness; ties will retain their randomized order
+        sorted_sequences = sorted(seq_list, key=lambda x: x.fitness, reverse=True)
         top_nodes = sorted_sequences[: self.beam_size]
 
         return top_nodes
