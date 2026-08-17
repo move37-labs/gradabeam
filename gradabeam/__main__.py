@@ -49,9 +49,8 @@ import inspect
 import time
 
 from gradabeam import argparse_lib
-from gradabeam.gradabeam_optimizer import GradaBeam
 from gradabeam.adabeam_optimizer import AdaBeam
-
+from gradabeam.gradabeam_optimizer import GradaBeam
 
 _OPTIMIZERS = {
     "gradabeam": GradaBeam,
@@ -281,18 +280,18 @@ def main(argv=None):
     # ------------------------------------------------------------------ #
     # Build shared kwargs                                                  #
     # ------------------------------------------------------------------ #
-    shared_kwargs = dict(
-        model_fn=model_fn,
-        start_sequence=start_sequence,
-        positions_to_mutate=positions_to_mutate,
-        mutations_per_sequence=mutations_per_sequence,
-        beam_size=args.beam_size,
-        n_rollouts_per_root=args.n_rollouts_per_root,
-        eval_batch_size=args.eval_batch_size,
-        rng_seed=args.rng_seed,
-        max_rollout_len=args.max_rollout_len,
-        debug=args.debug,
-    )
+    shared_kwargs = {
+        "model_fn": model_fn,
+        "start_sequence": start_sequence,
+        "positions_to_mutate": positions_to_mutate,
+        "mutations_per_sequence": mutations_per_sequence,
+        "beam_size": args.beam_size,
+        "n_rollouts_per_root": args.n_rollouts_per_root,
+        "eval_batch_size": args.eval_batch_size,
+        "rng_seed": args.rng_seed,
+        "max_rollout_len": args.max_rollout_len,
+        "debug": args.debug,
+    }
 
     # ------------------------------------------------------------------ #
     # Instantiate optimizer                                                #

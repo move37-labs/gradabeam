@@ -33,9 +33,7 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 
-from gradabeam import constants
-from gradabeam import seq_utils
-from gradabeam import tism
+from gradabeam import constants, seq_utils, tism
 
 
 class CountSubstringModel(torch.nn.Module, tism.TISMModelClass):

@@ -2,9 +2,10 @@
 
 import numpy as np
 import torch
+
 from gradabeam import constants
-from gradabeam.tism import TISMModelClass
 from gradabeam.seq_utils import dna2tensor_batch
+from gradabeam.tism import TISMModelClass
 
 
 class CountLetterModel(torch.nn.Module, TISMModelClass):

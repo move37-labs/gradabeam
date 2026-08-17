@@ -5,11 +5,10 @@ that outputs timing results as a single line of JSON. It can be dynamically
 pointed to a specific source directory to benchmark different git refs.
 """
 
-import sys
-import os
-
 import argparse
 import json
+import os
+import sys
 import time
 from typing import Any
 
@@ -33,7 +32,7 @@ else:
     sys.path.insert(0, repo_root)
     sys.path.insert(1, os.path.join(repo_root, "oracles"))
 
-from gradabeam import GradaBeam, AdaBeam  # noqa: E402
+from gradabeam import AdaBeam, GradaBeam
 
 
 def get_median(lst: list[float]) -> float:
@@ -64,31 +63,31 @@ def measure(
     start_seq = "A" * 3000
     model = BPNet(protein=protein)
 
-    adabeam_kwargs = dict(
-        model_fn=model,
-        start_sequence=start_seq,
-        beam_size=2,
-        mutations_per_sequence=1.0,
-        n_rollouts_per_root=4,
-        skip_repeat_sequences=False,
-        eval_batch_size=1,
-        rng_seed=5,
-    )
+    adabeam_kwargs = {
+        "model_fn": model,
+        "start_sequence": start_seq,
+        "beam_size": 2,
+        "mutations_per_sequence": 1.0,
+        "n_rollouts_per_root": 4,
+        "skip_repeat_sequences": False,
+        "eval_batch_size": 1,
+        "rng_seed": 5,
+    }
 
-    gradabeam_kwargs = dict(
-        model_fn=model,
-        start_sequence=start_seq,
-        beam_size=2,
-        mutations_per_sequence=2.0,
-        n_rollouts_per_root=4,
-        exploration_alpha=0.5,
-        use_pbt=True,
-        max_rollout_len=200,
-        eval_batch_size=1,
-        rng_seed=5,
-    )
+    gradabeam_kwargs = {
+        "model_fn": model,
+        "start_sequence": start_seq,
+        "beam_size": 2,
+        "mutations_per_sequence": 2.0,
+        "n_rollouts_per_root": 4,
+        "exploration_alpha": 0.5,
+        "use_pbt": True,
+        "max_rollout_len": 200,
+        "eval_batch_size": 1,
+        "rng_seed": 5,
+    }
 
-    designer_cls: type[GradaBeam] | type[AdaBeam]
+    designer_cls: type[GradaBeam | AdaBeam]
     kwargs: Any
     if designer_name.lower() == "gradabeam":
         designer_cls = GradaBeam

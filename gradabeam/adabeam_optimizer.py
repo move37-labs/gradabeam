@@ -4,14 +4,11 @@ Adaptive beam, adaptive mutation rate, adaptive directed evolution.
 """
 
 import collections
-
-import numpy as np
 from typing import Any
 
-from gradabeam import ada_utils
-from gradabeam import constants
-from gradabeam import testing_utils
+import numpy as np
 
+from gradabeam import ada_utils, constants, testing_utils
 
 RolloutNode = ada_utils.RolloutNode
 
@@ -293,9 +290,8 @@ class AdaBeam:
                     )
                 if self.debug and try_cnt % 50 == 0:
                     print(f"Couldnt find unique child after {try_cnt} tries...")
-            if self.debug:
-                if try_cnt > 1:
-                    print(f"Found child after {try_cnt} tries")
+            if self.debug and try_cnt > 1:
+                print(f"Found child after {try_cnt} tries")
             seqs.append(candidate)
         fitnesses = self.get_batched_fitness(seqs)
         assert len(fitnesses) == len(seqs) == len(nodes) == len(num_edit_locs)

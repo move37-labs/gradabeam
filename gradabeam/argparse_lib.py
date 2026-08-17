@@ -4,10 +4,9 @@ To verify that Zenodo resources are reachable:
     python -m gradabeam.argparse_lib
 """
 
-from typing import Iterable, Optional, Union
-
 import argparse
 import dataclasses
+from collections.abc import Iterable
 
 
 @dataclasses.dataclass
@@ -31,8 +30,8 @@ def possibly_parse_start_sequence(start_seq: str) -> str:
 
 
 def possibly_parse_positions_to_mutate(
-    positions_to_mutate: Optional[Union[str, list[int]]],
-) -> Optional[list[int]]:
+    positions_to_mutate: str | list[int] | None,
+) -> list[int] | None:
     """Possibly parse ``positions_to_mutate`` from a file, or pass it through unchanged.
 
     Prefix strings that trigger special handling:

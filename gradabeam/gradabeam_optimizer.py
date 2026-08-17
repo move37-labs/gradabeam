@@ -3,17 +3,15 @@
 Gradient-guided adaptive beam, adaptive mutation rate (PBT), adaptive directed evolution.
 """
 
-from typing import Any
-import numpy as np
-from scipy.special import softmax
 import dataclasses
 from dataclasses import field
-from functools import lru_cache
+from functools import cache
+from typing import Any
 
-from gradabeam import constants
-from gradabeam import testing_utils
-from gradabeam import ada_utils
+import numpy as np
+from scipy.special import softmax
 
+from gradabeam import ada_utils, constants, testing_utils
 
 PositionsAndCharactersType = ada_utils.PositionsAndCharactersType
 
@@ -153,7 +151,7 @@ class GradaBeam:
         rounded_rate = round(mutations_per_sequence, 4)
         return self._get_sampler_cached(rounded_rate)
 
-    @lru_cache(maxsize=None)
+    @cache
     def _get_sampler_cached(
         self, mutations_per_sequence: float
     ) -> ada_utils.NumberEditsSampler:

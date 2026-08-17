@@ -6,12 +6,10 @@ pytest gradabeam/gradabeam_optimizer_test.py
 ```
 """
 
+import numpy as np
 import pytest
 
-import numpy as np
-
 from gradabeam import testing_utils
-
 from gradabeam.gradabeam_optimizer import GradaBeam
 
 

@@ -27,6 +27,7 @@ make_oracle() returns an object with:
 import argparse
 import os
 import subprocess
+
 import numpy as np
 import torch
 
@@ -39,8 +40,7 @@ except ImportError:
         "(or pip install gradabeam[examples])"
     )
 
-from gradabeam import tism
-from gradabeam import seq_utils
+from gradabeam import seq_utils, tism
 
 # Constants
 VOCAB = ["A", "C", "G", "T"]
@@ -102,7 +102,7 @@ class CountWrapper(torch.nn.Module):
     """A wrapper class that only returns the predicted counts."""
 
     def __init__(self, model):
-        super(CountWrapper, self).__init__()
+        super().__init__()
         self.model = model
 
     def forward(self, X, X_ctl=None, **kwargs):
@@ -113,7 +113,7 @@ class ControlWrapper(torch.nn.Module):
     """This wrapper automatically creates a control track of all zeroes."""
 
     def __init__(self, model):
-        super(ControlWrapper, self).__init__()
+        super().__init__()
         self.model = model
 
     def forward(self, X, X_ctl=None):

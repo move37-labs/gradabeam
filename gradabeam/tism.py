@@ -2,6 +2,7 @@
 
 import numpy as np
 import torch
+
 from gradabeam.seq_utils import dna2tensor, dna2tensor_integer
 
 

@@ -10,9 +10,7 @@ pytest gradabeam/ada_utils_test.py
 import numpy as np
 import pytest
 
-from gradabeam import testing_utils
-from gradabeam import ada_utils
-
+from gradabeam import ada_utils, testing_utils
 
 # (sequence length, mutation rate)
 PARAMS_TO_TEST_ = [
@@ -154,7 +152,7 @@ def test_get_tisms_with_idxs():
     sequence = "ACAAA"
     idxs = [0, 2, 4]  # Only check positions 0, 2, 4
 
-    pos_and_chars, logits = model.get_tism(
+    pos_and_chars, _logits = model.get_tism(
         sequence=sequence,
         idxs=idxs,
     )
