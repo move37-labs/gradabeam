@@ -1,15 +1,15 @@
 """Common utilities for [Gr]Ada*."""
 
 import dataclasses
+from collections.abc import Callable
+from typing import Any
 
 import numpy as np
-from scipy.stats import binom
 import torch
 import xxhash
+from scipy.stats import binom
 
-from typing import Any, Callable
 from gradabeam import opt_utils
-
 
 PositionsAndCharactersType = list[tuple[int, str]]
 LogitsType = np.ndarray
@@ -62,7 +62,7 @@ class ModelWrapper:
         except AttributeError:
             try:
                 self.model.model.eval()
-            except Exception:
+            except Exception:  # noqa: BLE001, S110
                 pass
 
         if self.tism_cost is not None:
@@ -88,6 +88,7 @@ class ModelWrapper:
 
     def str_in_cache(self, seq: str) -> bool:
         """Check if a sequence is in the cache."""
+        # xxhash >= 4.0 requires: xxhash.xxh64(seq.encode("utf-8")).intdigest()
         k = xxhash.xxh64(seq).intdigest()
         return k in self.cache
 
@@ -106,6 +107,7 @@ class ModelWrapper:
             # 2) Pull from the has the fitness of the seen sequences.
             seen_fitness, unseen_seq, unseen_hash = [], [], []
             for i, seq in enumerate(m_input):
+                # xxhash >= 4.0 requires: xxhash.xxh64(seq.encode("utf-8")).intdigest()
                 k = xxhash.xxh64(seq).intdigest()
                 if k in self.cache:
                     seen_fitness.append((i, self.cache[k]))
@@ -114,9 +116,8 @@ class ModelWrapper:
                     unseen_hash.append(k)
             m_input = [seq for _, seq in unseen_seq]
 
-            if self.debug:
-                if len(seen_fitness) > 0:
-                    print(f"Cache hit: {len(seen_fitness)}")
+            if self.debug and len(seen_fitness) > 0:
+                print(f"Cache hit: {len(seen_fitness)}")
 
         if len(m_input) == 0:
             results = []
@@ -217,7 +218,7 @@ def num_edits_likelihood_adabeam(
     return probs
 
 
-class NumberEditsSampler(object):
+class NumberEditsSampler:
     """Vectorized samples the number of edits to make."""
 
     def __init__(

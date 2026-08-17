@@ -27,6 +27,7 @@ make_oracle() returns an object with:
 import argparse
 import os
 import subprocess
+
 import numpy as np
 import torch
 
@@ -39,8 +40,7 @@ except ImportError:
         "(or pip install gradabeam[examples])"
     )
 
-from gradabeam import tism
-from gradabeam import seq_utils
+from gradabeam import seq_utils, tism
 
 # Constants
 VOCAB = ["A", "C", "G", "T"]
@@ -81,7 +81,7 @@ def download(model_name: str):
             model = torch.load(
                 cache_path, weights_only=False, map_location=torch.device("cpu")
             )
-        except Exception:
+        except Exception:  # noqa: BLE001
             print("Cached file is corrupt, deleting and re-downloading...")
             os.remove(cache_path)
 
@@ -102,7 +102,7 @@ class CountWrapper(torch.nn.Module):
     """A wrapper class that only returns the predicted counts."""
 
     def __init__(self, model):
-        super(CountWrapper, self).__init__()
+        super().__init__()
         self.model = model
 
     def forward(self, X, X_ctl=None, **kwargs):
@@ -113,7 +113,7 @@ class ControlWrapper(torch.nn.Module):
     """This wrapper automatically creates a control track of all zeroes."""
 
     def __init__(self, model):
-        super(ControlWrapper, self).__init__()
+        super().__init__()
         self.model = model
 
     def forward(self, X, X_ctl=None):
@@ -176,7 +176,7 @@ class BPNet(tism.TISMModelClass):
         self, x: list[str], return_debug_info: bool = False
     ) -> "np.ndarray | tuple[np.ndarray, dict]":
         if isinstance(x, str):
-            raise ValueError(
+            raise TypeError(
                 f"BPNet input needs to be list of strings, not just string: {x}"
             )
         ret = self.inference_on_strings(x)

@@ -10,9 +10,7 @@ pytest gradabeam/ada_utils_test.py
 import numpy as np
 import pytest
 
-from gradabeam import testing_utils
-from gradabeam import ada_utils
-
+from gradabeam import ada_utils, testing_utils
 
 # (sequence length, mutation rate)
 PARAMS_TO_TEST_ = [
@@ -154,7 +152,7 @@ def test_get_tisms_with_idxs():
     sequence = "ACAAA"
     idxs = [0, 2, 4]  # Only check positions 0, 2, 4
 
-    pos_and_chars, logits = model.get_tism(
+    pos_and_chars, _logits = model.get_tism(
         sequence=sequence,
         idxs=idxs,
     )
@@ -172,3 +170,19 @@ def test_get_tisms_with_idxs():
         assert len(mutations_at_pos) == 3, (
             f"Position {pos} should have 3 mutations, got {len(mutations_at_pos)}"
         )
+
+
+def test_get_fitness_cache_hashes_string_sequences():
+    """Fitness cache hashes str DNA and preserves order on hits."""
+    model_fn = testing_utils.CountLetterModel(target_char="A")
+    model = ada_utils.ModelWrapper(model_fn, use_cache=True)
+    seqs = ["ACGT", "AAAA", "ACGT"]
+
+    first = model.get_fitness(seqs)
+    assert len(first) == 3
+    assert first[0] == first[2]
+    assert model.str_in_cache("ACGT")
+    assert model.str_in_cache("AAAA")
+
+    second = model.get_fitness(["ACGT", "AAAA"])
+    assert second == first[:2]

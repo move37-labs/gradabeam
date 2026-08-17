@@ -6,12 +6,13 @@ pytest gradabeam/adabeam_optimizer_test.py
 ```
 """
 
-import pytest
-import numpy as np
 import random
 
-from gradabeam.adabeam_optimizer import AdaBeam
+import numpy as np
+import pytest
+
 from gradabeam import testing_utils
+from gradabeam.adabeam_optimizer import AdaBeam
 
 
 @pytest.mark.parametrize("skip_repeat_sequences", [True, False])

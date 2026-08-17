@@ -19,7 +19,9 @@ def run_cmd(
     cmd: str, cwd: str | None = None, check: bool = True
 ) -> subprocess.CompletedProcess:
     """Helper to run a shell command and capture its output."""
-    res = subprocess.run(cmd, shell=True, capture_output=True, text=True, cwd=cwd)
+    res = subprocess.run(
+        cmd, shell=True, capture_output=True, text=True, cwd=cwd, check=False
+    )
     if check and res.returncode != 0:
         raise RuntimeError(
             f"Command failed: {cmd}\n"
@@ -46,7 +48,7 @@ def get_merge_base(base_branch: str = "main") -> str:
                 ref = res.stdout.strip()
                 if ref:
                     return ref
-        except Exception:
+        except Exception:  # noqa: BLE001, S112
             continue
 
     # Fallback to HEAD~1

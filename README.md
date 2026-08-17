@@ -65,13 +65,13 @@ The optimizers take a `model_fn` oracle: a callable mapping `list[str] -> list[f
 from gradabeam import GradaBeam
 
 optimizer = GradaBeam(
-    model_fn=your_model,          # callable: list[str] -> list[float], minimized
+    model_fn=your_model,  # callable: list[str] -> list[float], minimized
     start_sequence="ACGTACGTACGT",
     mutations_per_sequence=2.0,
     beam_size=10,
     n_rollouts_per_root=4,
-    exploration_alpha=0.5,       # 0.0 = fully gradient-guided, 1.0 = uniform random
-    use_pbt=True,                 # adapt the mutation rate via Population Based Training
+    exploration_alpha=0.5,  # 0.0 = fully gradient-guided, 1.0 = uniform random
+    use_pbt=True,  # adapt the mutation rate via Population Based Training
 )
 
 optimizer.run(n_steps=20)
