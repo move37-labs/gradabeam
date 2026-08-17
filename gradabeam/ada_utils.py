@@ -88,6 +88,7 @@ class ModelWrapper:
 
     def str_in_cache(self, seq: str) -> bool:
         """Check if a sequence is in the cache."""
+        # xxhash >= 4.0 requires: xxhash.xxh64(seq.encode("utf-8")).intdigest()
         k = xxhash.xxh64(seq).intdigest()
         return k in self.cache
 
@@ -106,6 +107,7 @@ class ModelWrapper:
             # 2) Pull from the has the fitness of the seen sequences.
             seen_fitness, unseen_seq, unseen_hash = [], [], []
             for i, seq in enumerate(m_input):
+                # xxhash >= 4.0 requires: xxhash.xxh64(seq.encode("utf-8")).intdigest()
                 k = xxhash.xxh64(seq).intdigest()
                 if k in self.cache:
                     seen_fitness.append((i, self.cache[k]))

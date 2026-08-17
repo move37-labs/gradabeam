@@ -172,3 +172,19 @@ def test_get_tisms_with_idxs():
         assert len(mutations_at_pos) == 3, (
             f"Position {pos} should have 3 mutations, got {len(mutations_at_pos)}"
         )
+
+
+def test_get_fitness_cache_hashes_string_sequences():
+    """Fitness cache hashes str DNA and preserves order on hits."""
+    model_fn = testing_utils.CountLetterModel(target_char="A")
+    model = ada_utils.ModelWrapper(model_fn, use_cache=True)
+    seqs = ["ACGT", "AAAA", "ACGT"]
+
+    first = model.get_fitness(seqs)
+    assert len(first) == 3
+    assert first[0] == first[2]
+    assert model.str_in_cache("ACGT")
+    assert model.str_in_cache("AAAA")
+
+    second = model.get_fitness(["ACGT", "AAAA"])
+    assert second == first[:2]
