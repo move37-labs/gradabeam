@@ -62,7 +62,7 @@ class ModelWrapper:
         except AttributeError:
             try:
                 self.model.model.eval()
-            except Exception:
+            except Exception:  # noqa: BLE001, S110
                 pass
 
         if self.tism_cost is not None:

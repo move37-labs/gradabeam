@@ -5,7 +5,6 @@ Gradient-guided adaptive beam, adaptive mutation rate (PBT), adaptive directed e
 
 import dataclasses
 from dataclasses import field
-from functools import cache
 from typing import Any
 
 import numpy as np
@@ -112,6 +111,7 @@ class GradaBeam:
         self.gradient_prob_cap = gradient_prob_cap
         self.max_logit = max_logit
         self.debug = debug
+        self._sampler_cache: dict[float, ada_utils.NumberEditsSampler] = {}
 
         assert isinstance(start_sequence, str)
         seed_node = RolloutNode(
@@ -149,18 +149,16 @@ class GradaBeam:
         self, mutations_per_sequence: float
     ) -> ada_utils.NumberEditsSampler:
         rounded_rate = round(mutations_per_sequence, 4)
-        return self._get_sampler_cached(rounded_rate)
-
-    @cache
-    def _get_sampler_cached(
-        self, mutations_per_sequence: float
-    ) -> ada_utils.NumberEditsSampler:
-        mu = mutations_per_sequence / len(self.positions_to_mutate)
-        return ada_utils.NumberEditsSamplerAdaBeam(
-            sequence_len=len(self.positions_to_mutate),
-            mutation_rate=mu,
-            rng_seed=self.rng_seed,
-        )
+        sampler = self._sampler_cache.get(rounded_rate)
+        if sampler is None:
+            mu = rounded_rate / len(self.positions_to_mutate)
+            sampler = ada_utils.NumberEditsSamplerAdaBeam(
+                sequence_len=len(self.positions_to_mutate),
+                mutation_rate=mu,
+                rng_seed=self.rng_seed,
+            )
+            self._sampler_cache[rounded_rate] = sampler
+        return sampler
 
     def _get_next_mutation_params(self, node: RolloutNode) -> tuple[int, float]:
         """Calculates n_edits, new mutation rate, and target alpha for the child node."""

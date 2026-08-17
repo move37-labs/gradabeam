@@ -82,7 +82,7 @@ class CountSubstringModel(torch.nn.Module, tism.TISMModelClass):
 
     def __call__(self, seqs: list[str], return_debug_info: bool = False):
         if isinstance(seqs, str):
-            raise ValueError(
+            raise TypeError(
                 f"CountSubstringModel input must be a list of strings, not a single string: {seqs!r}"
             )
         torch_seq = seq_utils.dna2tensor_batch(seqs, vocab_list=self.vocab)

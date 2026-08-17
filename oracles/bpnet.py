@@ -81,7 +81,7 @@ def download(model_name: str):
             model = torch.load(
                 cache_path, weights_only=False, map_location=torch.device("cpu")
             )
-        except Exception:
+        except Exception:  # noqa: BLE001
             print("Cached file is corrupt, deleting and re-downloading...")
             os.remove(cache_path)
 
@@ -176,7 +176,7 @@ class BPNet(tism.TISMModelClass):
         self, x: list[str], return_debug_info: bool = False
     ) -> "np.ndarray | tuple[np.ndarray, dict]":
         if isinstance(x, str):
-            raise ValueError(
+            raise TypeError(
                 f"BPNet input needs to be list of strings, not just string: {x}"
             )
         ret = self.inference_on_strings(x)
