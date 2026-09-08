@@ -30,24 +30,6 @@ class RolloutNodeWithProbs(ada_utils.RolloutNode):
     )
     exploration_alpha: float = dataclasses.field(default=0.05, compare=False, hash=True)
 
-    @property
-    def sort_key(self) -> tuple:
-        """Total ordering for deterministic, hash-seed-independent sorting.
-
-        Includes all scalar state first, then a byte serialization of probs as a
-        final fallback so the order is total even when every scalar ties.  The
-        bytes comparison is reached only when fitness/seq/etc. are already equal,
-        so it never triggers NumPy's ambiguous-array-comparison error.
-        """
-        return (
-            self.fitness,
-            self.seq,
-            self.edits_since_root,
-            self.mutations_per_sequence,
-            self.exploration_alpha,
-            self.probs.tobytes() if self.probs is not None else b"",
-        )
-
 
 RolloutNode = RolloutNodeWithProbs
 
@@ -211,9 +193,12 @@ class GradaBeam:
     def get_samples(self, n_samples: int) -> list[str]:
         """Get samples."""
         limit = min(n_samples, len(self.current_nodes))
-        sorted_nodes = sorted(
-            self.current_nodes, key=lambda x: x.sort_key, reverse=True
-        )
+        # Shuffle nodes deterministically using self.rng before stable sort
+        seq_list = list(self.current_nodes)
+        self.rng.shuffle(seq_list)
+
+        # Sort stably by fitness; ties will retain their randomized order
+        sorted_nodes = sorted(seq_list, key=lambda x: x.fitness, reverse=True)
         return [x.seq for x in sorted_nodes][:limit]
 
     def propose_sequences(self, root_nodes: list[RolloutNode]) -> list[RolloutNode]:
@@ -245,7 +230,12 @@ class GradaBeam:
         if len(nodes_visited) == 0:
             raise ValueError("No nodes generated.")
 
-        sorted_nodes = sorted(nodes_visited, key=lambda x: x.sort_key, reverse=True)
+        # Convert the set to a list and deterministically shuffle it
+        seq_list = list(nodes_visited)
+        self.rng.shuffle(seq_list)
+
+        # Sort stably by fitness; ties will retain their randomized order
+        sorted_nodes = sorted(seq_list, key=lambda x: x.fitness, reverse=True)
         top_nodes = sorted_nodes[: self.beam_size]
 
         return top_nodes
