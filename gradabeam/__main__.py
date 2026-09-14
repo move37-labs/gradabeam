@@ -29,6 +29,16 @@ Examples
         --mutations_per_sequence 1.0 \
         --n_rollouts_per_root 4
 
+    # Paper-result AdaBeam from NucleoBench
+    python -m gradabeam \
+        --optimizer adabeam-reference \
+        --oracle_script oracles/count_letter.py \
+        --start_sequence AAAAAAAAAA \
+        --time_budget 15 \
+        --beam_size 2 \
+        --mutations_per_sequence 1.0 \
+        --n_rollouts_per_root 4
+
     # GradaBeam with the BPNet neural-network oracle on a real biological sequence
     python -m gradabeam \
         --optimizer gradabeam \
@@ -50,12 +60,18 @@ import time
 
 from gradabeam import argparse_lib
 from gradabeam.adabeam_optimizer import AdaBeam
+from gradabeam.adabeam_reference import AdaBeamReference
 from gradabeam.gradabeam_optimizer import GradaBeam
+from gradabeam.gradabeam_reference import GradaBeamReference
 
 _OPTIMIZERS = {
     "gradabeam": GradaBeam,
     "adabeam": AdaBeam,
+    "gradabeam-reference": GradaBeamReference,
+    "adabeam-reference": AdaBeamReference,
 }
+_GRADABEAM_OPTIMIZERS = {"gradabeam", "gradabeam-reference"}
+_ADABEAM_OPTIMIZERS = {"adabeam", "adabeam-reference"}
 
 
 def _load_oracle(path: str, unknown_args: list[str] | None = None):
@@ -83,6 +99,7 @@ def _build_parser() -> argparse.ArgumentParser:
         prog="python -m gradabeam",
         description=(
             "Run GradaBeam or AdaBeam sequence optimization.\n"
+            "Use *-reference variants for NucleoBench paper-result designers.\n"
             "Requires a custom oracle script via --oracle_script."
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -95,7 +112,12 @@ def _build_parser() -> argparse.ArgumentParser:
         "--optimizer",
         choices=list(_OPTIMIZERS),
         default="gradabeam",
-        help="Which optimizer to run.",
+        help=(
+            "Which optimizer to run. "
+            "`adabeam` / `gradabeam` are the current implementations. "
+            "`adabeam-reference` / `gradabeam-reference` reproduce the "
+            "NucleoBench paper-result designers."
+        ),
     )
     p.add_argument(
         "--oracle_script",
@@ -221,7 +243,7 @@ def _build_parser() -> argparse.ArgumentParser:
         type=argparse_lib.str_to_bool,
         default=None,
         metavar="BOOL",
-        help="Enable Population Based Training for adaptive mutation rate. Required for gradabeam.",
+        help="Enable Population Based Training for adaptive mutation rate. Required for gradabeam and gradabeam-reference.",
     )
 
     # ------------------------------------------------------------------ #
@@ -296,10 +318,14 @@ def main(argv=None):
     # ------------------------------------------------------------------ #
     # Instantiate optimizer                                                #
     # ------------------------------------------------------------------ #
-    if args.optimizer == "gradabeam":
+    optimizer_cls = _OPTIMIZERS[args.optimizer]
+    if args.optimizer in _GRADABEAM_OPTIMIZERS:
         if args.use_pbt is None:
-            parser.error("--use_pbt is required when --optimizer is gradabeam")
-        optimizer = GradaBeam(
+            parser.error(
+                "--use_pbt is required when --optimizer is "
+                "gradabeam or gradabeam-reference"
+            )
+        optimizer = optimizer_cls(
             **shared_kwargs,
             exploration_alpha=args.exploration_alpha
             if args.exploration_alpha is not None
@@ -310,8 +336,8 @@ def main(argv=None):
             max_logit=args.max_logit if args.max_logit is not None else 3.0,
             use_pbt=args.use_pbt,
         )
-    elif args.optimizer == "adabeam":
-        optimizer = AdaBeam(
+    elif args.optimizer in _ADABEAM_OPTIMIZERS:
+        optimizer = optimizer_cls(
             **shared_kwargs,
             skip_repeat_sequences=args.skip_repeat_sequences
             if args.skip_repeat_sequences is not None
