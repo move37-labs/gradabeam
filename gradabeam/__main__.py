@@ -190,7 +190,10 @@ def _build_parser() -> argparse.ArgumentParser:
         "--eval_batch_size",
         type=int,
         default=1,
-        help="Sequences sent to the oracle per batch call.",
+        help=(
+            "Sequences sent to the oracle per batch call. "
+            "AdaBeam supports values > 1. GradaBeam requires 1."
+        ),
     )
     shared.add_argument(
         "--rng_seed",
@@ -324,6 +327,11 @@ def main(argv=None):
             parser.error(
                 "--use_pbt is required when --optimizer is "
                 "gradabeam or gradabeam-reference"
+            )
+        if args.optimizer == "gradabeam" and args.eval_batch_size != 1:
+            parser.error(
+                "GradaBeam only supports --eval_batch_size 1; "
+                "rollout batching is not implemented."
             )
         optimizer = optimizer_cls(
             **shared_kwargs,

@@ -25,7 +25,7 @@ def possibly_parse_start_sequence(start_seq: str) -> str:
     if start_seq.startswith("local://"):
         local_fileloc = start_seq[len("local://") :]
         with open(local_fileloc, "r") as f:
-            start_seq = f.read()
+            start_seq = f.read().strip()
     return start_seq
 
 

@@ -30,7 +30,7 @@ class RolloutNode:
     """
 
     seq: str
-    fitness: np.float32
+    fitness: float
 
 
 class ModelWrapper:
@@ -52,6 +52,9 @@ class ModelWrapper:
         self.use_cache = use_cache
         self.cache_limit = cache_limit
         self.cache: dict[int, float] = {}
+        self.cache_hits: int = 0
+        self.tism_calls: int = 0
+        self.oracle_batches: int = 0
         self.debug = debug
         self.tism_cost = tism_cost
 
@@ -88,9 +91,7 @@ class ModelWrapper:
 
     def str_in_cache(self, seq: str) -> bool:
         """Check if a sequence is in the cache."""
-        # xxhash >= 4.0 requires: xxhash.xxh64(seq.encode("utf-8")).intdigest()
-        k = xxhash.xxh64(seq.encode("utf-8")).intdigest()
-        return k in self.cache
+        return hash_sequence(seq) in self.cache
 
     def get_fitness(self, m_input: list) -> list[float]:
         self.cost += len(m_input)
@@ -107,9 +108,9 @@ class ModelWrapper:
             # 2) Pull from the has the fitness of the seen sequences.
             seen_fitness, unseen_seq, unseen_hash = [], [], []
             for i, seq in enumerate(m_input):
-                # xxhash >= 4.0 requires: xxhash.xxh64(seq.encode("utf-8")).intdigest()
-                k = xxhash.xxh64(seq.encode("utf-8")).intdigest()
+                k = hash_sequence(seq)
                 if k in self.cache:
+                    self.cache_hits += 1
                     seen_fitness.append((i, self.cache[k]))
                 else:
                     unseen_seq.append((i, seq))
@@ -126,6 +127,7 @@ class ModelWrapper:
             # doesn't work with RinAlmo's jit.compile optimization,
             # so we use the fastest we can.
             with self.torch_opt_fn():
+                self.oracle_batches += 1
                 results = self.model(m_input)
 
         if self.use_cache:
@@ -155,6 +157,7 @@ class ModelWrapper:
         if self.tism_cost < 1.0:
             raise ValueError("Cost must be >= 1.0.")
         self.cost += self.tism_cost
+        self.tism_calls += 1
 
         # Use fast tensor-based TISM
         pos_and_chars_to_mutate, logits = self.model.get_tism(sequence, idxs)
@@ -340,6 +343,15 @@ def generate_random_mutant_tism(
             i
         )  # Use relative position, which is needed downstream.
     return "".join(mutant), rel_pos_of_mutations
+
+
+def hash_sequence(seq: str) -> int:
+    """Stable xxhash64 digest for a DNA string.
+
+    Strings are encoded as UTF-8 so xxhash 3.x and 4.x produce the same
+    digest. Passing a raw ``str`` raises on xxhash >= 4.
+    """
+    return xxhash.xxh64(seq.encode("utf-8")).intdigest()
 
 
 def get_batched_fitness(

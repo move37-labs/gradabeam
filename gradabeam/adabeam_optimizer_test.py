@@ -6,13 +6,38 @@ pytest gradabeam/adabeam_optimizer_test.py
 ```
 """
 
+import json
+import os
 import random
+import subprocess
+import sys
 
 import numpy as np
 import pytest
 
 from gradabeam import testing_utils
 from gradabeam.adabeam_optimizer import AdaBeam
+
+
+def _make_adabeam(**overrides):
+    kwargs = AdaBeam.debug_init_args()
+    kwargs.update(
+        {
+            "model_fn": testing_utils.CountLetterModel(),
+            "start_sequence": "A" * 20,
+            "beam_size": 4,
+            "n_rollouts_per_root": 2,
+            "mutations_per_sequence": 2.0,
+            "skip_repeat_sequences": False,
+            "rng_seed": 42,
+        }
+    )
+    kwargs.update(overrides)
+    return AdaBeam(**kwargs)
+
+
+def _beam_rows(nodes):
+    return [(n.seq, float(n.fitness)) for n in nodes]
 
 
 @pytest.mark.parametrize("skip_repeat_sequences", [True, False])
@@ -165,3 +190,87 @@ def test_adabeam_determinism_and_diversity():
     out3 = adabeam3.get_samples(10)
 
     assert out1 != out3
+
+
+def test_skip_repeat_retries_until_uncached():
+    opt = _make_adabeam(skip_repeat_sequences=True, beam_size=2)
+    parent = opt.current_nodes[0]
+    cached = parent.seq
+    calls = {"n": 0}
+
+    def fake_generate(_sequence: str, _n: int) -> str:
+        calls["n"] += 1
+        return cached if calls["n"] == 1 else "T" * len(cached)
+
+    opt.generate_mutations = fake_generate  # type: ignore[method-assign]
+    child = opt.mutate_nodes([parent], [1])[0]
+    assert calls["n"] == 2
+    assert child.seq == "T" * len(cached)
+
+
+def test_init_beam_is_ranked_and_get_samples_is_pure():
+    opt = _make_adabeam()
+    fitnesses = [float(n.fitness) for n in opt.current_nodes]
+    assert fitnesses == sorted(fitnesses, reverse=True)
+    mut_before = opt.rng.bit_generator.state
+    tie_before = opt.tie_rng.bit_generator.state
+    assert opt.get_samples(len(opt.current_nodes)) == [n.seq for n in opt.current_nodes]
+    assert opt.rng.bit_generator.state == mut_before
+    assert opt.tie_rng.bit_generator.state == tie_before
+
+
+def test_get_samples_does_not_change_later_search():
+    opt = _make_adabeam()
+    opt.run(n_steps=1)
+    mut_before = opt.rng.bit_generator.state
+    tie_before = opt.tie_rng.bit_generator.state
+    first = opt.get_samples(3)
+    second = opt.get_samples(3)
+    assert first == second
+    assert opt.rng.bit_generator.state == mut_before
+    assert opt.tie_rng.bit_generator.state == tie_before
+
+    after_observe = _make_adabeam()
+    after_observe.run(n_steps=1)
+    after_observe.get_samples(3)
+    after_observe.run(n_steps=1)
+    control = _make_adabeam()
+    control.run(n_steps=2)
+    assert _beam_rows(after_observe.current_nodes) == _beam_rows(control.current_nodes)
+
+
+_HASHSEED_SCRIPT = r"""
+import json
+from gradabeam.adabeam_optimizer import AdaBeam
+
+opt = AdaBeam(**AdaBeam.debug_init_args())
+opt.run(n_steps=2)
+print(json.dumps(opt.get_samples(4)))
+"""
+
+
+def _run_adabeam_with_hashseed(hashseed: str) -> list[str]:
+    env = os.environ.copy()
+    env["PYTHONHASHSEED"] = hashseed
+    env.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
+    env["PYTHONPATH"] = os.pathsep.join(
+        [
+            os.path.abspath(os.path.join(os.path.dirname(__file__), "..")),
+            env.get("PYTHONPATH", ""),
+        ]
+    )
+    proc = subprocess.run(
+        [sys.executable, "-c", _HASHSEED_SCRIPT],
+        env=env,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return json.loads(proc.stdout.strip().splitlines()[-1])
+
+
+def test_seeded_run_matches_across_pythonhashseed():
+    first = _run_adabeam_with_hashseed("0")
+    second = _run_adabeam_with_hashseed("1")
+    third = _run_adabeam_with_hashseed("random")
+    assert first == second == third
