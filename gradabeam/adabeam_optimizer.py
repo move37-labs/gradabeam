@@ -8,12 +8,12 @@ from typing import Any
 
 import numpy as np
 
-from gradabeam import ada_utils, constants, testing_utils
+from gradabeam import ada_utils, beam_common, constants, testing_utils
 
 RolloutNode = ada_utils.RolloutNode
 
 
-class AdaBeam:
+class AdaBeam(beam_common.BeamOptimizerMixin):
     """AdaBeam designer."""
 
     def __init__(
@@ -48,11 +48,9 @@ class AdaBeam:
             max_rollout_len: Maximum number of rollouts to perform per parent node.
             debug: If `True`, print debug information.
         """
-        self.positions_to_mutate = positions_to_mutate or list(
-            range(len(start_sequence))
+        self.positions_to_mutate = beam_common.resolve_positions_to_mutate(
+            start_sequence, positions_to_mutate
         )
-        assert min(self.positions_to_mutate) >= 0
-        assert max(self.positions_to_mutate) < len(start_sequence)
 
         assert mutations_per_sequence > 0  # 0 NOT allowed.
         assert mutations_per_sequence <= len(self.positions_to_mutate)
@@ -74,6 +72,10 @@ class AdaBeam:
         self.eval_batch_size = eval_batch_size
         self.rng_seed = rng_seed
         self.rng = np.random.default_rng(rng_seed)
+        # Dedicated stream for beam-ranking ties only. Same seed, independent
+        # Generator, so mutation draws are unaffected.
+        self.tie_rng = np.random.default_rng(rng_seed)
+        self.candidate_key_fn = beam_common.adabeam_candidate_key
         self.num_mutations_sampler = self.get_sampler(self.mu)
         self.max_rollout_len = max_rollout_len
 
@@ -82,7 +84,7 @@ class AdaBeam:
 
         # Mutate a string to create a starting population.
         assert isinstance(start_sequence, str)
-        seed_node = RolloutNode(seq=start_sequence, fitness=np.float32(np.nan))
+        seed_node = RolloutNode(seq=start_sequence, fitness=float("nan"))
         num_edit_locs = self.num_mutations_sampler.sample(beam_size)
         self.current_nodes = []
         for i in range(0, beam_size, self.eval_batch_size):
@@ -93,13 +95,8 @@ class AdaBeam:
                     cur_num_edits,
                 )
             )
-
-    def get_batched_fitness(self, sequences: list[str]) -> np.ndarray:
-        """Get fitness for a batch of sequences."""
-        return ada_utils.get_batched_fitness(
-            model_wrapper=self.model,
-            sequences=sequences,
-            batch_size=self.eval_batch_size,
+        self.current_nodes = beam_common.rank_nodes_by_fitness(
+            self.current_nodes, self.beam_size, self.tie_rng
         )
 
     def generate_mutations(self, sequence: str, random_n_locs: int) -> str:
@@ -193,20 +190,10 @@ class AdaBeam:
         print(f"  mean   : {n_changed_arr.mean():.4f}")
         print("=" * 62)
 
-    def get_samples(self, n_samples: int) -> list[str]:
-        """Get samples."""
-        limit = min(n_samples, len(self.current_nodes))
-        # Shuffle nodes deterministically using self.rng before stable sort
-        seq_list = list(self.current_nodes)
-        self.rng.shuffle(seq_list)
-
-        # Sort stably by fitness; ties will retain their randomized order
-        sorted_nodes = sorted(seq_list, key=lambda x: x.fitness, reverse=True)
-        return [x.seq for x in sorted_nodes][:limit]
-
     def propose_sequences(self, root_nodes: list[RolloutNode]) -> list[RolloutNode]:
         """Propose top `beam_size` sequences for evaluation."""
-        sequences, rollout_lengths = set(), []
+        candidates: dict[tuple[str, float], RolloutNode] = {}
+        rollout_lengths: list[int] = []
         # Perform `n_rollouts_per_root` rollouts on each root node.
         root_nodes_effective = root_nodes * self.n_rollouts_per_root
         for i in range(0, len(root_nodes_effective), self.eval_batch_size):
@@ -236,31 +223,25 @@ class AdaBeam:
                             }
                         )
 
-                # Add these children to the candidate set of new sequences.
-                sequences.update(children)
+                for child in children:
+                    beam_common.accumulate_first_observed(
+                        candidates, self.candidate_key_fn(child), child
+                    )
 
-                # Stop the rollout once the child has worse fitness.
                 cur_rollout_length += 1
-                new_nodes = []
-                for child, comparison_node in zip(children, parent_nodes):
-                    if child.fitness >= comparison_node.fitness:
-                        new_nodes.append(child)
-                    else:
-                        rollout_lengths.append(cur_rollout_length)
-                parent_nodes = new_nodes
+                parent_nodes, terminated = beam_common.filter_accepted_children(
+                    children, parent_nodes, cur_rollout_length
+                )
+                rollout_lengths.extend(terminated)
 
-        if len(sequences) == 0:
+        if len(candidates) == 0:
             raise ValueError("No sequences generated.")
 
-        # Convert the set to a list and deterministically shuffle it
-        seq_list = list(sequences)
-        self.rng.shuffle(seq_list)
-
-        # Sort stably by fitness; ties will retain their randomized order
-        sorted_sequences = sorted(seq_list, key=lambda x: x.fitness, reverse=True)
-        top_nodes = sorted_sequences[: self.beam_size]
-
-        return top_nodes
+        # Insertion order from deterministic rollout/chunk expansion.
+        self._last_candidates = list(candidates.values())
+        return beam_common.rank_nodes_by_fitness(
+            self._last_candidates, self.beam_size, self.tie_rng
+        )
 
     def mutate_nodes(
         self,
@@ -298,4 +279,6 @@ class AdaBeam:
         for f in fitnesses:
             assert not np.isnan(f)
 
-        return [RolloutNode(seq=seq, fitness=f) for seq, f in zip(seqs, fitnesses)]
+        return [
+            RolloutNode(seq=seq, fitness=float(f)) for seq, f in zip(seqs, fitnesses)
+        ]

@@ -10,31 +10,37 @@ from typing import Any
 import numpy as np
 from scipy.special import softmax
 
-from gradabeam import ada_utils, constants, testing_utils
+from gradabeam import ada_utils, beam_common, constants, testing_utils
 
 PositionsAndCharactersType = ada_utils.PositionsAndCharactersType
+TismActionData = tuple[PositionsAndCharactersType, np.ndarray]
 
 
 @dataclasses.dataclass(frozen=True)
 class RolloutNodeWithProbs(ada_utils.RolloutNode):
-    """Class for tracking rollout node with probabilities."""
+    """Class for tracking rollout node with probabilities.
+
+    Equality and hashing use the documented candidate identity:
+
+    ``(seq, fitness, edits_since_root, mutations_per_sequence, exploration_alpha)``
+
+    Gradient arrays are excluded. This matches
+    ``beam_common.gradabeam_candidate_key``.
+    """
 
     probs: np.ndarray | None = field(default=None, hash=False, compare=False)
     pos_and_chars: PositionsAndCharactersType | None = field(
         default=None, hash=False, compare=False
     )
     edits_since_root: int | None = None
-    # [PBT Modification]:
-    mutations_per_sequence: float = dataclasses.field(
-        default=1.0, compare=False, hash=True
-    )
-    exploration_alpha: float = dataclasses.field(default=0.05, compare=False, hash=True)
+    mutations_per_sequence: float = 1.0
+    exploration_alpha: float = 0.05
 
 
 RolloutNode = RolloutNodeWithProbs
 
 
-class GradaBeam:
+class GradaBeam(beam_common.BeamOptimizerMixin):
     """GradaBeam nucleic acid sequence designer with PBT."""
 
     def __init__(
@@ -54,8 +60,15 @@ class GradaBeam:
         eval_batch_size: int = 1,
         debug: bool = False,
     ):
-        self.positions_to_mutate = positions_to_mutate or list(
-            range(len(start_sequence))
+        if eval_batch_size != 1:
+            raise ValueError(
+                "GradaBeam only supports eval_batch_size=1. "
+                "Larger values are rejected at construction because rollout "
+                "batching is not implemented."
+            )
+
+        self.positions_to_mutate = beam_common.resolve_positions_to_mutate(
+            start_sequence, positions_to_mutate
         )
         self.tism_positions = (
             None
@@ -63,8 +76,6 @@ class GradaBeam:
             else self.positions_to_mutate
         )
 
-        assert min(self.positions_to_mutate) >= 0
-        assert max(self.positions_to_mutate) < len(start_sequence)
         assert mutations_per_sequence > 0
         assert beam_size > 0
         assert n_rollouts_per_root > 0
@@ -88,6 +99,10 @@ class GradaBeam:
         self.eval_batch_size = eval_batch_size
         self.rng_seed = rng_seed
         self.rng = np.random.default_rng(rng_seed)
+        # Dedicated stream for beam-ranking ties only. Same seed, independent
+        # Generator, so mutation draws are unaffected.
+        self.tie_rng = np.random.default_rng(rng_seed)
+        self.candidate_key_fn = beam_common.gradabeam_candidate_key
 
         self.max_rollout_len = max_rollout_len
         self.gradient_prob_cap = gradient_prob_cap
@@ -98,7 +113,7 @@ class GradaBeam:
         assert isinstance(start_sequence, str)
         seed_node = RolloutNode(
             seq=start_sequence,
-            fitness=np.float32(0.0),
+            fitness=0.0,
             edits_since_root=0,
             probs=None,
             pos_and_chars=None,
@@ -106,9 +121,11 @@ class GradaBeam:
             exploration_alpha=float(exploration_alpha),
         )
 
-        # Initialize with gradient-based mutations
+        # Initialize with gradient-based mutations. Cache TISM action data by
+        # sequence so the seed is scored once, not beam_size times.
+        init_tism_cache: dict[str, TismActionData] = {}
         initialized_roots = self.initialize_roots_with_gradients(
-            [seed_node] * beam_size
+            [seed_node] * beam_size, tism_cache=init_tism_cache
         )
 
         # Setup initial PBT sampling
@@ -126,6 +143,9 @@ class GradaBeam:
                     [seed_node.mutations_per_sequence] * len(cur_num_edits),
                 )
             )
+        self.current_nodes = beam_common.rank_nodes_by_fitness(
+            self.current_nodes, self.beam_size, self.tie_rng
+        )
 
     def get_sampler(
         self, mutations_per_sequence: float
@@ -157,13 +177,6 @@ class GradaBeam:
             n_edits = int(self.get_sampler(current_rate).sample(1)[0])
             return n_edits, current_rate
 
-    def get_batched_fitness(self, sequences: list[str]) -> np.ndarray:
-        return ada_utils.get_batched_fitness(
-            model_wrapper=self.model,
-            sequences=sequences,
-            batch_size=self.eval_batch_size,
-        )
-
     @staticmethod
     def debug_init_args():
         return {
@@ -190,22 +203,13 @@ class GradaBeam:
                     f"[PBT] Exploration Alphas of top candidates (high is uniform): {alphas}"
                 )
 
-    def get_samples(self, n_samples: int) -> list[str]:
-        """Get samples."""
-        limit = min(n_samples, len(self.current_nodes))
-        # Shuffle nodes deterministically using self.rng before stable sort
-        seq_list = list(self.current_nodes)
-        self.rng.shuffle(seq_list)
-
-        # Sort stably by fitness; ties will retain their randomized order
-        sorted_nodes = sorted(seq_list, key=lambda x: x.fitness, reverse=True)
-        return [x.seq for x in sorted_nodes][:limit]
-
     def propose_sequences(self, root_nodes: list[RolloutNode]) -> list[RolloutNode]:
         """Propose top `beam_size` sequences for evaluation."""
-        nodes_visited: set[RolloutNodeWithProbs] = set()
+        candidates: dict[tuple, RolloutNode] = {}
         rollout_lengths: list[int] = []
-        gradient_node_cache: dict[str, RolloutNodeWithProbs] = {}
+        # Sequence -> immutable TISM action data (pos/char map, raw logits).
+        # Never cache adaptive PBT node state here.
+        tism_cache: dict[str, TismActionData] = {}
 
         root_nodes_effective = root_nodes * self.n_rollouts_per_root
         for i in range(0, len(root_nodes_effective), self.eval_batch_size):
@@ -215,47 +219,63 @@ class GradaBeam:
             assert len(parent_nodes) == 1, (
                 "GradaBeam propose_sequences expects exactly one parent node."
             )
-            parent_seq = parent_nodes[0].seq
+            parent_nodes = self.initialize_roots_with_gradients(
+                parent_nodes, tism_cache=tism_cache
+            )
 
-            if parent_seq in gradient_node_cache:
-                parent_nodes = [gradient_node_cache[parent_seq]]
-            else:
-                parent_nodes = self.initialize_roots_with_gradients(parent_nodes)
-                gradient_node_cache[parent_seq] = parent_nodes[0]
+            cur_nodes_visited, cur_rollout_lengths = self.rollout(
+                parent_nodes=parent_nodes
+            )
+            for node in cur_nodes_visited:
+                beam_common.accumulate_first_observed(
+                    candidates, self.candidate_key_fn(node), node
+                )
+            rollout_lengths.extend(cur_rollout_lengths)
 
-            cur_nodes_visited, rollout_lengths = self.rollout(parent_nodes=parent_nodes)
-            nodes_visited.update(cur_nodes_visited)
-            rollout_lengths.extend(rollout_lengths)
-
-        if len(nodes_visited) == 0:
+        if len(candidates) == 0:
             raise ValueError("No nodes generated.")
 
-        # Convert the set to a list and deterministically shuffle it
-        seq_list = list(nodes_visited)
-        self.rng.shuffle(seq_list)
-
-        # Sort stably by fitness; ties will retain their randomized order
-        sorted_nodes = sorted(seq_list, key=lambda x: x.fitness, reverse=True)
-        top_nodes = sorted_nodes[: self.beam_size]
-
-        return top_nodes
-
-    def initialize_roots_with_gradients(
-        self, nodes: list[RolloutNode]
-    ) -> list[RolloutNode]:
-        """Calculates gradients for roots and upgrades them to GradientRolloutNodes."""
-        probs_list, pos_and_chars_list = self.probabilities_over_actions_from_tism(
-            nodes
+        self._last_candidates = list(candidates.values())
+        return beam_common.rank_nodes_by_fitness(
+            self._last_candidates, self.beam_size, self.tie_rng
         )
 
+    def _get_tism_action_data(
+        self, sequence: str, tism_cache: dict[str, TismActionData]
+    ) -> TismActionData:
+        cached = tism_cache.get(sequence)
+        if cached is not None:
+            return cached
+        pos_and_chars, logits = self.model.get_tism(
+            sequence=sequence, idxs=self.tism_positions, debug=self.debug
+        )
+        assert len(pos_and_chars) == 3 * len(self.positions_to_mutate), (
+            len(pos_and_chars),
+            len(self.positions_to_mutate),
+            self.tism_positions,
+        )
+        assert len(pos_and_chars) == len(logits)
+        tism_cache[sequence] = (pos_and_chars, logits)
+        return pos_and_chars, logits
+
+    def initialize_roots_with_gradients(
+        self,
+        nodes: list[RolloutNode],
+        tism_cache: dict[str, TismActionData] | None = None,
+    ) -> list[RolloutNode]:
+        """Attach per-node probabilities to roots from cached TISM logits."""
+        if tism_cache is None:
+            tism_cache = {}
+
         grad_nodes = []
-        for node, probs, pos_and_chars in zip(nodes, probs_list, pos_and_chars_list):
+        for node in nodes:
+            pos_and_chars, logits = self._get_tism_action_data(node.seq, tism_cache)
             grad_nodes.append(
                 RolloutNode(
                     seq=node.seq,
                     fitness=node.fitness,
                     edits_since_root=0,
-                    probs=probs,
+                    probs=self.logits_to_probs(logits, node.exploration_alpha),
                     pos_and_chars=pos_and_chars,
                     mutations_per_sequence=node.mutations_per_sequence,
                     exploration_alpha=node.exploration_alpha,
@@ -265,9 +285,10 @@ class GradaBeam:
 
     def rollout(
         self, parent_nodes: list[RolloutNode]
-    ) -> tuple[set[RolloutNode], list[int]]:
+    ) -> tuple[list[RolloutNode], list[int]]:
         """Rollout with PBT."""
-        nodes_visited, rollout_lengths = set(), []
+        candidates: dict[tuple, RolloutNode] = {}
+        rollout_lengths: list[int] = []
 
         cur_rollout_length = 0
         while len(parent_nodes) > 0 and cur_rollout_length < self.max_rollout_len:
@@ -283,18 +304,18 @@ class GradaBeam:
                 parent_nodes, num_edit_locs, new_rates
             )
 
-            nodes_visited.update(children)
+            for child in children:
+                beam_common.accumulate_first_observed(
+                    candidates, self.candidate_key_fn(child), child
+                )
 
             cur_rollout_length += 1
-            new_nodes = []
-            for child, comparison_node in zip(children, parent_nodes):
-                if child.fitness >= comparison_node.fitness:
-                    new_nodes.append(child)
-                else:
-                    rollout_lengths.append(cur_rollout_length)
-            parent_nodes = new_nodes
+            parent_nodes, terminated = beam_common.filter_accepted_children(
+                children, parent_nodes, cur_rollout_length
+            )
+            rollout_lengths.extend(terminated)
 
-        return nodes_visited, rollout_lengths
+        return list(candidates.values()), rollout_lengths
 
     def mutate_nodes_gradabeam(
         self,
@@ -366,7 +387,7 @@ class GradaBeam:
         return [
             RolloutNode(
                 seq=seq,
-                fitness=np.float32(float(f)),
+                fitness=float(f),
                 probs=probs,
                 edits_since_root=n.edits_since_root + int(num_edits),
                 pos_and_chars=n.pos_and_chars,
@@ -390,24 +411,11 @@ class GradaBeam:
     def probabilities_over_actions_from_tism(
         self, nodes: list[RolloutNode]
     ) -> tuple[list[np.ndarray], list[PositionsAndCharactersType]]:
-        # ... [Same as original] ...
+        tism_cache: dict[str, TismActionData] = {}
         probs_list, pos_and_chars_list = [], []
         for n in nodes:
-            pos_and_chars, logits = self.model.get_tism(
-                sequence=n.seq, idxs=self.tism_positions, debug=self.debug
-            )
-            # Make sure `pos_to_mutate` is respected.
-            assert len(pos_and_chars) == 3 * len(self.positions_to_mutate), (
-                len(pos_and_chars),
-                len(self.positions_to_mutate),
-                self.tism_positions,
-            )
-            assert len(pos_and_chars) == len(logits)
-
-            # 2. Compute Probabilities
-            # This handles Temperature, Stability, and Exploration in one step.
-            probs = self.logits_to_probs(logits, n.exploration_alpha)
-            probs_list.append(probs)
+            pos_and_chars, logits = self._get_tism_action_data(n.seq, tism_cache)
+            probs_list.append(self.logits_to_probs(logits, n.exploration_alpha))
             pos_and_chars_list.append(pos_and_chars)
         return probs_list, pos_and_chars_list
 

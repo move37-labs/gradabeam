@@ -38,6 +38,24 @@ class ArgparseLibTest(unittest.TestCase):
         path = f"local://{tmp_file}"
         self.assertEqual(argparse_lib.possibly_parse_start_sequence(path), seq)
 
+    def test_parse_start_sequence_strips_trailing_lf(self):
+        tmp_file = os.path.join(self.test_dir.name, "seq_lf.txt")
+        with open(tmp_file, "w") as f:
+            f.write("ATGC\n")
+        self.assertEqual(
+            argparse_lib.possibly_parse_start_sequence(f"local://{tmp_file}"),
+            "ATGC",
+        )
+
+    def test_parse_start_sequence_strips_trailing_crlf(self):
+        tmp_file = os.path.join(self.test_dir.name, "seq_crlf.txt")
+        with open(tmp_file, "wb") as f:
+            f.write(b"ATGC\r\n")
+        self.assertEqual(
+            argparse_lib.possibly_parse_start_sequence(f"local://{tmp_file}"),
+            "ATGC",
+        )
+
     # Tests for possibly_parse_positions_to_mutate
     # ================================================
 

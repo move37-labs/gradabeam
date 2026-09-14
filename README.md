@@ -173,21 +173,11 @@ def __call__(self, sequences: list[str]) -> list[float]:
     ...
 ```
 
-**GradaBeam** additionally requires the oracle to provide gradient-based mutation information via `get_tism`
-(internally it also relies on a `tism_torch` method):
-
-```python
-def get_tism(
-    self, sequence: str, idxs: list[int] | None = None
-) -> tuple[list[tuple[int, str]], np.ndarray]:
-    """Return (pos_and_chars_to_mutate, logits) for the mutable positions."""
-    ...
-```
-
-The easiest way to satisfy this is to inherit from `gradabeam.tism.TISMModelClass`, which implements `get_tism` and
-`tism_torch` for you given a small set of model hooks (`vocab`, `vocab_array`, `vocab_to_idx`, and
-`inference_on_tensor`). See [`oracles/bpnet.py`](oracles/bpnet.py) and
-[`oracles/substring_count.py`](oracles/substring_count.py) for reference implementations.
+**GradaBeam** additionally requires the oracle to provide gradient-based mutation information via `tism_torch`
+(used by `ModelWrapper.get_tism`). The easiest way to satisfy this is to inherit from
+`gradabeam.tism.TISMModelClass`, which implements `get_tism` and `tism_torch` given a small set of model hooks
+(`vocab`, `vocab_array`, `vocab_to_idx`, and `inference_on_tensor`). See [`oracles/template.py`](oracles/template.py),
+[`oracles/bpnet.py`](oracles/bpnet.py), and [`oracles/substring_count.py`](oracles/substring_count.py).
 
 ## Key Parameters
 
@@ -197,7 +187,7 @@ The easiest way to satisfy this is to inherit from `gradabeam.tism.TISMModelClas
 | `mutations_per_sequence` | Both | Expected number of edits applied per mutation step. |
 | `beam_size` | Both | Number of candidate sequences carried between rounds. |
 | `n_rollouts_per_root` | Both | Rollouts launched from each beam candidate per round. |
-| `eval_batch_size` | Both | Sequences sent to the model per batch call. |
+| `eval_batch_size` | Both | Sequences sent to the model per batch call. AdaBeam supports values > 1. GradaBeam requires `1`. |
 | `rng_seed` | Both | Seed for reproducibility. |
 | `positions_to_mutate` | Both | Optional list of mutable positions (0-based). Defaults to all. |
 | `max_rollout_len` | Both | Max rollout depth before stopping. |

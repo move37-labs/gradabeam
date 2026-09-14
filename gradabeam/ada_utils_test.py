@@ -9,6 +9,7 @@ pytest gradabeam/ada_utils_test.py
 
 import numpy as np
 import pytest
+import xxhash
 
 from gradabeam import ada_utils, testing_utils
 
@@ -172,6 +173,14 @@ def test_get_tisms_with_idxs():
         )
 
 
+def test_hash_sequence_encodes_utf8():
+    """xxhash 3.x/4.x both accept encoded bytes and agree on this digest."""
+    digest = ada_utils.hash_sequence("ACGT")
+    expected = xxhash.xxh64(b"ACGT").intdigest()
+    assert digest == expected
+    assert isinstance(digest, int)
+
+
 def test_get_fitness_cache_hashes_string_sequences():
     """Fitness cache hashes str DNA and preserves order on hits."""
     model_fn = testing_utils.CountLetterModel(target_char="A")
@@ -186,3 +195,49 @@ def test_get_fitness_cache_hashes_string_sequences():
 
     second = model.get_fitness(["ACGT", "AAAA"])
     assert second == first[:2]
+
+
+def test_generate_random_mutant_v2_can_leave_sequence_unchanged():
+    """AdaBeam replacement draws from the full alphabet, including the original base."""
+    rng = np.random.default_rng(0)
+    n_draws = 4000
+    silent = sum(
+        ada_utils.generate_random_mutant_v2(
+            sequence="AAAA",
+            positions_to_mutate=[0, 1, 2, 3],
+            random_n_loc=1,
+            alphabet="ACGT",
+            rng=rng,
+        )
+        == "AAAA"
+        for _ in range(n_draws)
+    )
+    assert 0.18 < silent / n_draws < 0.32
+
+
+def test_generate_random_mutant_tism_can_collide_on_one_position():
+    """Two TISM actions can share a sequence position when mass is concentrated there."""
+    pos_and_chars = [(0, "C"), (0, "G"), (0, "T"), (1, "C"), (1, "G"), (1, "T")]
+    probs = np.array([0.5, 0.5, 0.0, 0.0, 0.0, 0.0], dtype=np.float64)
+    mutant, rel = ada_utils.generate_random_mutant_tism(
+        sequence="AA",
+        pos_and_chars_to_mutate=pos_and_chars,
+        random_n_loc=2,
+        rng=np.random.default_rng(1),
+        probs=probs,
+    )
+    positions = [pos_and_chars[int(i)][0] for i in rel]
+    assert len(rel) == 2
+    assert set(positions) == {0}
+    assert mutant[1] == "A"
+    assert mutant[0] in ("C", "G")
+
+
+def test_number_edits_sampler_adabeam_seeds_from_rng_seed_not_rate():
+    """Different mutation rates still start from the same seed stream."""
+    a = ada_utils.NumberEditsSamplerAdaBeam(16, 1.0 / 16, rng_seed=7)
+    b = ada_utils.NumberEditsSamplerAdaBeam(16, 2.0 / 16, rng_seed=7)
+    assert (
+        a.rng.bit_generator.state["state"]["state"]
+        == b.rng.bit_generator.state["state"]["state"]
+    )
