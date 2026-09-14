@@ -83,7 +83,7 @@ class AdaBeam:
 
         # Mutate a string to create a starting population.
         assert isinstance(start_sequence, str)
-        seed_node = RolloutNode(seq=start_sequence, fitness=np.float32(np.nan))
+        seed_node = RolloutNode(seq=start_sequence, fitness=float("nan"))
         num_edit_locs = self.num_mutations_sampler.sample(beam_size)
         self.current_nodes = []
         for i in range(0, beam_size, self.eval_batch_size):
@@ -296,4 +296,6 @@ class AdaBeam:
         for f in fitnesses:
             assert not np.isnan(f)
 
-        return [RolloutNode(seq=seq, fitness=f) for seq, f in zip(seqs, fitnesses)]
+        return [
+            RolloutNode(seq=seq, fitness=float(f)) for seq, f in zip(seqs, fitnesses)
+        ]

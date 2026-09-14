@@ -99,7 +99,7 @@ class GradaBeam:
         assert isinstance(start_sequence, str)
         seed_node = RolloutNode(
             seq=start_sequence,
-            fitness=np.float32(0.0),
+            fitness=0.0,
             edits_since_root=0,
             probs=None,
             pos_and_chars=None,

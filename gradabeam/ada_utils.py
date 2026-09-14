@@ -30,7 +30,7 @@ class RolloutNode:
     """
 
     seq: str
-    fitness: np.float32
+    fitness: float
 
 
 class ModelWrapper:
