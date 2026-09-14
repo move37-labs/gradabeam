@@ -268,6 +268,11 @@ def test_adabeam_reference_eval_batch_size_consistency():
     assert np.array_equal(scores2, scores4)
 
 
+def test_adabeam_reference_child_fitness_matches_nucleobench_dtype():
+    adabeam = AdaBeamReference(**AdaBeamReference.debug_init_args())
+    assert all(type(n.fitness) is np.float64 for n in adabeam.current_nodes)
+
+
 @pytest.mark.skip(reason="Frozen Mac snapshots are not portable across platforms.")
 def test_adabeam_reference_matches_nucleobench_snapshots():
     """Lock paper-result trajectories, including PYTHONHASHSEED-sensitive set order."""

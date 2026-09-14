@@ -4,6 +4,7 @@ Adaptive beam, adaptive mutation rate, adaptive directed evolution.
 """
 
 import collections
+import heapq
 from typing import Any
 
 import numpy as np
@@ -82,7 +83,7 @@ class AdaBeam:
 
         # Mutate a string to create a starting population.
         assert isinstance(start_sequence, str)
-        seed_node = RolloutNode(seq=start_sequence, fitness=np.float32(np.nan))
+        seed_node = RolloutNode(seq=start_sequence, fitness=float("nan"))
         num_edit_locs = self.num_mutations_sampler.sample(beam_size)
         self.current_nodes = []
         for i in range(0, beam_size, self.eval_batch_size):
@@ -196,13 +197,10 @@ class AdaBeam:
     def get_samples(self, n_samples: int) -> list[str]:
         """Get samples."""
         limit = min(n_samples, len(self.current_nodes))
-        # Shuffle nodes deterministically using self.rng before stable sort
-        seq_list = list(self.current_nodes)
-        self.rng.shuffle(seq_list)
-
-        # Sort stably by fitness; ties will retain their randomized order
-        sorted_nodes = sorted(seq_list, key=lambda x: x.fitness, reverse=True)
-        return [x.seq for x in sorted_nodes][:limit]
+        top_nodes = heapq.nlargest(
+            limit, self.current_nodes, key=lambda node: node.fitness
+        )
+        return [node.seq for node in top_nodes]
 
     def propose_sequences(self, root_nodes: list[RolloutNode]) -> list[RolloutNode]:
         """Propose top `beam_size` sequences for evaluation."""
@@ -252,13 +250,13 @@ class AdaBeam:
         if len(sequences) == 0:
             raise ValueError("No sequences generated.")
 
-        # Convert the set to a list and deterministically shuffle it
-        seq_list = list(sequences)
-        self.rng.shuffle(seq_list)
-
-        # Sort stably by fitness; ties will retain their randomized order
-        sorted_sequences = sorted(seq_list, key=lambda x: x.fitness, reverse=True)
-        top_nodes = sorted_sequences[: self.beam_size]
+        # Keep beam selection independent of the mutation RNG.  ``nlargest`` is
+        # stable for equal keys, matching ``sorted(..., reverse=True)[:k]`` while
+        # avoiding a full sort when the beam is much smaller than the candidate
+        # set.
+        top_nodes = heapq.nlargest(
+            self.beam_size, sequences, key=lambda node: node.fitness
+        )
 
         return top_nodes
 
@@ -298,4 +296,6 @@ class AdaBeam:
         for f in fitnesses:
             assert not np.isnan(f)
 
-        return [RolloutNode(seq=seq, fitness=f) for seq, f in zip(seqs, fitnesses)]
+        return [
+            RolloutNode(seq=seq, fitness=float(f)) for seq, f in zip(seqs, fitnesses)
+        ]

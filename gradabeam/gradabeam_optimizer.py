@@ -4,6 +4,7 @@ Gradient-guided adaptive beam, adaptive mutation rate (PBT), adaptive directed e
 """
 
 import dataclasses
+import heapq
 from dataclasses import field
 from typing import Any
 
@@ -98,7 +99,7 @@ class GradaBeam:
         assert isinstance(start_sequence, str)
         seed_node = RolloutNode(
             seq=start_sequence,
-            fitness=np.float32(0.0),
+            fitness=0.0,
             edits_since_root=0,
             probs=None,
             pos_and_chars=None,
@@ -193,13 +194,10 @@ class GradaBeam:
     def get_samples(self, n_samples: int) -> list[str]:
         """Get samples."""
         limit = min(n_samples, len(self.current_nodes))
-        # Shuffle nodes deterministically using self.rng before stable sort
-        seq_list = list(self.current_nodes)
-        self.rng.shuffle(seq_list)
-
-        # Sort stably by fitness; ties will retain their randomized order
-        sorted_nodes = sorted(seq_list, key=lambda x: x.fitness, reverse=True)
-        return [x.seq for x in sorted_nodes][:limit]
+        top_nodes = heapq.nlargest(
+            limit, self.current_nodes, key=lambda node: node.fitness
+        )
+        return [node.seq for node in top_nodes]
 
     def propose_sequences(self, root_nodes: list[RolloutNode]) -> list[RolloutNode]:
         """Propose top `beam_size` sequences for evaluation."""
@@ -230,13 +228,13 @@ class GradaBeam:
         if len(nodes_visited) == 0:
             raise ValueError("No nodes generated.")
 
-        # Convert the set to a list and deterministically shuffle it
-        seq_list = list(nodes_visited)
-        self.rng.shuffle(seq_list)
-
-        # Sort stably by fitness; ties will retain their randomized order
-        sorted_nodes = sorted(seq_list, key=lambda x: x.fitness, reverse=True)
-        top_nodes = sorted_nodes[: self.beam_size]
+        # Keep beam selection independent of the mutation RNG.  ``nlargest`` is
+        # stable for equal keys, matching ``sorted(..., reverse=True)[:k]`` while
+        # avoiding a full sort when the beam is much smaller than the candidate
+        # set.
+        top_nodes = heapq.nlargest(
+            self.beam_size, nodes_visited, key=lambda node: node.fitness
+        )
 
         return top_nodes
 
@@ -366,7 +364,7 @@ class GradaBeam:
         return [
             RolloutNode(
                 seq=seq,
-                fitness=np.float32(float(f)),
+                fitness=float(f),
                 probs=probs,
                 edits_since_root=n.edits_since_root + int(num_edits),
                 pos_and_chars=n.pos_and_chars,

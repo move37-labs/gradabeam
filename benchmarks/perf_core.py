@@ -24,6 +24,7 @@ for i, arg in enumerate(sys.argv):
 
 if source_dir:
     src_dir = os.path.abspath(source_dir)
+    repo_root = src_dir
     sys.path.insert(0, src_dir)
     sys.path.insert(1, os.path.join(src_dir, "oracles"))
 else:
@@ -49,7 +50,7 @@ def get_median(lst: list[float]) -> float:
 
 def measure(
     designer_name: str,
-    protein: str = "GATA2",
+    protein: str = "ATAC",
     n_repeats: int = 5,
     warmup_steps: int = 20,
     steps_per_repeat: int = 200,
@@ -60,7 +61,14 @@ def measure(
     """
     from bpnet import BPNet  # lazy import: bpnet-lite is an optional dependency
 
-    start_seq = "A" * 3000
+    # Use a real BPNet-length sequence.
+    start_seq_path = os.path.join(repo_root, "ATAC_start_seq.txt")
+    with open(start_seq_path, encoding="utf-8") as f:
+        start_seq = f.read().strip()
+    if len(start_seq) != 3000:
+        raise ValueError(
+            f"Expected a 3,000-bp benchmark sequence, got {len(start_seq):,} bp"
+        )
     model = BPNet(protein=protein)
 
     adabeam_kwargs = {
@@ -164,7 +172,7 @@ def main():
     parser.add_argument(
         "--protein",
         type=str,
-        default="GATA2",
+        default="ATAC",
         help="Protein to use for BPNet.",
     )
 
