@@ -13,12 +13,20 @@ benchmark.
 
 ## Overview
 
-This package provides two sequence optimizers for designing biomolecular sequences:
+This package provides sequence optimizers for designing biomolecular sequences:
 
 | Optimizer | Gradient-guided | PBT | File |
 |-----------|:--------------:|:---:|------|
 | **GradaBeam** | Yes | Optional | `gradabeam/gradabeam_optimizer.py` |
 | **AdaBeam** | No (random) | No | `gradabeam/adabeam_optimizer.py` |
+| **GradaBeamReference** | Yes | Optional | `gradabeam/gradabeam_reference.py` |
+| **AdaBeamReference** | No (random) | No | `gradabeam/adabeam_reference.py` |
+
+`AdaBeam` and `GradaBeam` are the current implementations. `AdaBeamReference` and
+`GradaBeamReference` are additive, paper-result ports of the internal NucleoBench
+designers and are intended to reproduce those published trajectories. They reuse
+this package's mutation helpers, but keep the original ranking, initialization,
+sampler-caching, PBT, and fitness-dtype behavior.
 
 Both use adaptive beam search with rollouts. Each round, the beam (a set of candidate sequences) is expanded by rolling out random or gradient-guided mutations, and the top-scoring candidates are kept.
 
@@ -98,6 +106,37 @@ optimizer.run(n_steps=20)
 top_sequences = optimizer.get_samples(n_samples=5)
 ```
 
+### Paper-result reference designers
+
+```python
+from gradabeam import AdaBeamReference, GradaBeamReference
+
+adabeam_ref = AdaBeamReference(
+    model_fn=your_model,
+    start_sequence="ACGTACGTACGT",
+    mutations_per_sequence=2.0,
+    beam_size=10,
+    n_rollouts_per_root=4,
+    eval_batch_size=1,
+    skip_repeat_sequences=True,
+)
+
+gradabeam_ref = GradaBeamReference(
+    model_fn=your_model,
+    start_sequence="ACGTACGTACGT",
+    mutations_per_sequence=2.0,
+    beam_size=10,
+    n_rollouts_per_root=4,
+    exploration_alpha=0.5,
+    use_pbt=True,
+)
+```
+
+These classes were ported from NucleoBench:
+
+- AdaBeam: `nucleobench/optimizations/ada/adabeam/adabeam.py` blob `767402c810da5b8df45f81b3238897d7bb194af0`
+- GradaBeam: `nucleobench/optimizations/ada/gradabeam/gradabeam.py` blob `569ea54af6331d07edcd4bb294cc09186b451824`
+
 ## Command-Line Interface
 
 The CLI runs either optimizer against an oracle that you supply via `--oracle_script`. The script must define a
@@ -109,8 +148,9 @@ oracles ship in the [`oracles/`](oracles) directory:
 - [`oracles/bpnet.py`](oracles/bpnet.py) — a real BPNet transcription-factor-binding model (requires the `examples` extra).
 
 You must pass `--beam_size`, `--mutations_per_sequence`, and `--n_rollouts_per_root`, plus exactly one of `--n_steps`
-or `--time_budget`. For `--optimizer gradabeam` you must also pass `--use_pbt`. Any extra flags are forwarded to the
-oracle's `make_oracle()`.
+or `--time_budget`. For `--optimizer gradabeam` or `--optimizer gradabeam-reference` you must also pass `--use_pbt`.
+`--optimizer adabeam-reference` and `--optimizer gradabeam-reference` select the NucleoBench paper-result designers.
+Any extra flags are forwarded to the oracle's `make_oracle()`.
 
 ```bash
 # GradaBeam demo: maximize C-content with the count_letter oracle
@@ -146,6 +186,16 @@ python -m gradabeam \
     --n_rollouts_per_root 4 \
     --use_pbt False \
     --protein ATAC
+
+# Paper-result AdaBeam from NucleoBench
+python -m gradabeam \
+    --optimizer adabeam-reference \
+    --oracle_script oracles/count_letter.py \
+    --start_sequence AAAAAAAAAA \
+    --n_steps 10 \
+    --beam_size 5 \
+    --mutations_per_sequence 2.0 \
+    --n_rollouts_per_root 4
 ```
 
 The `--start_sequence` (and `--positions_to_mutate`) flags support two special prefixes:
@@ -183,19 +233,19 @@ def __call__(self, sequences: list[str]) -> list[float]:
 
 | Parameter | Applies to | Description |
 |-----------|-----------|-------------|
-| `start_sequence` | Both | Initial DNA string (alphabet `ACGT`). |
-| `mutations_per_sequence` | Both | Expected number of edits applied per mutation step. |
-| `beam_size` | Both | Number of candidate sequences carried between rounds. |
-| `n_rollouts_per_root` | Both | Rollouts launched from each beam candidate per round. |
-| `eval_batch_size` | Both | Sequences sent to the model per batch call. AdaBeam supports values > 1. GradaBeam requires `1`. |
-| `rng_seed` | Both | Seed for reproducibility. |
-| `positions_to_mutate` | Both | Optional list of mutable positions (0-based). Defaults to all. |
-| `max_rollout_len` | Both | Max rollout depth before stopping. |
-| `exploration_alpha` | GradaBeam | Blend of gradient-guided (0.0) vs. uniform-random (1.0) mutations. |
-| `use_pbt` | GradaBeam | Enable Population Based Training for an adaptive mutation rate. |
-| `gradient_prob_cap` | GradaBeam | Per-action probability cap applied after softmax. |
-| `max_logit` | GradaBeam | Dynamic temperature ceiling for TISM logit scaling. |
-| `skip_repeat_sequences` | AdaBeam | Skip already-evaluated sequences during rollouts. |
+| `start_sequence` | All | Initial DNA string (alphabet `ACGT`). |
+| `mutations_per_sequence` | All | Expected number of edits applied per mutation step. |
+| `beam_size` | All | Number of candidate sequences carried between rounds. |
+| `n_rollouts_per_root` | All | Rollouts launched from each beam candidate per round. |
+| `eval_batch_size` | All | Sequences sent to the model per batch call. AdaBeam and both reference designers support values > 1. GradaBeam requires `1`. |
+| `rng_seed` | All | Seed for reproducibility. |
+| `positions_to_mutate` | All | Optional list of mutable positions (0-based). Defaults to all. |
+| `max_rollout_len` | All | Max rollout depth before stopping. |
+| `exploration_alpha` | GradaBeam / GradaBeamReference | Blend of gradient-guided (0.0) vs. uniform-random (1.0) mutations. |
+| `use_pbt` | GradaBeam / GradaBeamReference | Enable Population Based Training for an adaptive mutation rate. |
+| `gradient_prob_cap` | GradaBeam / GradaBeamReference | Per-action probability cap applied after softmax. |
+| `max_logit` | GradaBeam / GradaBeamReference | Dynamic temperature ceiling for TISM logit scaling. |
+| `skip_repeat_sequences` | AdaBeam / AdaBeamReference | Skip already-evaluated sequences during rollouts. |
 
 ## Development
 
