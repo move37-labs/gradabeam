@@ -36,10 +36,10 @@ _ADABEAM_SHARED = {
 _NUCLEOBENCH_ADABEAM_SNAPSHOTS = {
     "adabeam_default": {
         "initial": [
-            {"seq": "ACAAAAAAAAAAAAACAAAA", "fitness": 2.0, "fitness_type": "float"},
-            {"seq": "AAAAAAAAAAAAAAAAAAAA", "fitness": 0.0, "fitness_type": "float"},
-            {"seq": "AAAAGAAAAAAAATAAAAAA", "fitness": 0.0, "fitness_type": "float"},
-            {"seq": "AAAAAAAAAAAAATAGAAAA", "fitness": 0.0, "fitness_type": "float"},
+            {"seq": "ACAAAAAAAAAAAAACAAAA", "fitness": 2.0, "fitness_type": "float64"},
+            {"seq": "AAAAAAAAAAAAAAAAAAAA", "fitness": 0.0, "fitness_type": "float64"},
+            {"seq": "AAAAGAAAAAAAATAAAAAA", "fitness": 0.0, "fitness_type": "float64"},
+            {"seq": "AAAAAAAAAAAAATAGAAAA", "fitness": 0.0, "fitness_type": "float64"},
         ],
         "samples_init": [
             "ACAAAAAAAAAAAAACAAAA",
@@ -48,10 +48,10 @@ _NUCLEOBENCH_ADABEAM_SNAPSHOTS = {
             "AAAAAAAAAAAAATAGAAAA",
         ],
         "after_3": [
-            {"seq": "AACCTTCCTAAGCCCCCCCA", "fitness": 11.0, "fitness_type": "float"},
-            {"seq": "GACCTCCCTAAGCCCCCACA", "fitness": 11.0, "fitness_type": "float"},
-            {"seq": "GCCCTAACCACCCCCAAACA", "fitness": 11.0, "fitness_type": "float"},
-            {"seq": "TCCCTAACCACCCCCAAAAA", "fitness": 10.0, "fitness_type": "float"},
+            {"seq": "AACCTTCCTAAGCCCCCCCA", "fitness": 11.0, "fitness_type": "float64"},
+            {"seq": "GACCTCCCTAAGCCCCCACA", "fitness": 11.0, "fitness_type": "float64"},
+            {"seq": "GCCCTAACCACCCCCAAACA", "fitness": 11.0, "fitness_type": "float64"},
+            {"seq": "TCCCTAACCACCCCCAAAAA", "fitness": 10.0, "fitness_type": "float64"},
         ],
         "samples": [
             "AACCTTCCTAAGCCCCCCCA",
@@ -62,10 +62,10 @@ _NUCLEOBENCH_ADABEAM_SNAPSHOTS = {
     },
     "adabeam_skip_repeat": {
         "initial": [
-            {"seq": "ACAAAAAAAAAAAAACAAAA", "fitness": 2.0, "fitness_type": "float"},
-            {"seq": "AAAAAAAAAAAAAAAAAAAA", "fitness": 0.0, "fitness_type": "float"},
-            {"seq": "AAAAGAAAAAAAATAAAAAA", "fitness": 0.0, "fitness_type": "float"},
-            {"seq": "AAAAAAAAAAAAATAGAAAA", "fitness": 0.0, "fitness_type": "float"},
+            {"seq": "ACAAAAAAAAAAAAACAAAA", "fitness": 2.0, "fitness_type": "float64"},
+            {"seq": "AAAAAAAAAAAAAAAAAAAA", "fitness": 0.0, "fitness_type": "float64"},
+            {"seq": "AAAAGAAAAAAAATAAAAAA", "fitness": 0.0, "fitness_type": "float64"},
+            {"seq": "AAAAAAAAAAAAATAGAAAA", "fitness": 0.0, "fitness_type": "float64"},
         ],
         "samples_init": [
             "ACAAAAAAAAAAAAACAAAA",
@@ -74,10 +74,10 @@ _NUCLEOBENCH_ADABEAM_SNAPSHOTS = {
             "AAAAAAAAAAAAATAGAAAA",
         ],
         "after_3": [
-            {"seq": "GCCATAAACAAACCCACACC", "fitness": 9.0, "fitness_type": "float"},
-            {"seq": "GCCAAAATCAAACCCACGCA", "fitness": 8.0, "fitness_type": "float"},
-            {"seq": "GCGAAAAACAAACCCACACC", "fitness": 8.0, "fitness_type": "float"},
-            {"seq": "ACTAGCAACAACGCCACACT", "fitness": 8.0, "fitness_type": "float"},
+            {"seq": "GCCATAAACAAACCCACACC", "fitness": 9.0, "fitness_type": "float64"},
+            {"seq": "GCCAAAATCAAACCCACGCA", "fitness": 8.0, "fitness_type": "float64"},
+            {"seq": "GCGAAAAACAAACCCACACC", "fitness": 8.0, "fitness_type": "float64"},
+            {"seq": "ACTAGCAACAACGCCACACT", "fitness": 8.0, "fitness_type": "float64"},
         ],
         "samples": [
             "GCCATAAACAAACCCACACC",
@@ -88,10 +88,10 @@ _NUCLEOBENCH_ADABEAM_SNAPSHOTS = {
     },
     "adabeam_positions": {
         "initial": [
-            {"seq": "CAAAAACAAAAAAAAAAAAA", "fitness": 2.0, "fitness_type": "float"},
-            {"seq": "AAAAAAAAAAAAAAAAAAAA", "fitness": 0.0, "fitness_type": "float"},
-            {"seq": "AGAATAAAAAAAAAAAAAAA", "fitness": 0.0, "fitness_type": "float"},
-            {"seq": "AAAAATGAAAAAAAAAAAAA", "fitness": 0.0, "fitness_type": "float"},
+            {"seq": "CAAAAACAAAAAAAAAAAAA", "fitness": 2.0, "fitness_type": "float64"},
+            {"seq": "AAAAAAAAAAAAAAAAAAAA", "fitness": 0.0, "fitness_type": "float64"},
+            {"seq": "AGAATAAAAAAAAAAAAAAA", "fitness": 0.0, "fitness_type": "float64"},
+            {"seq": "AAAAATGAAAAAAAAAAAAA", "fitness": 0.0, "fitness_type": "float64"},
         ],
         "samples_init": [
             "CAAAAACAAAAAAAAAAAAA",
@@ -100,10 +100,10 @@ _NUCLEOBENCH_ADABEAM_SNAPSHOTS = {
             "AAAAATGAAAAAAAAAAAAA",
         ],
         "after_3": [
-            {"seq": "CACCTCACAAAAAAAAAAAA", "fitness": 5.0, "fitness_type": "float"},
-            {"seq": "CGCTCCCTAAAAAAAAAAAA", "fitness": 5.0, "fitness_type": "float"},
-            {"seq": "CTCTCCCTAAAAAAAAAAAA", "fitness": 5.0, "fitness_type": "float"},
-            {"seq": "CTCGCACTAAAAAAAAAAAA", "fitness": 4.0, "fitness_type": "float"},
+            {"seq": "CACCTCACAAAAAAAAAAAA", "fitness": 5.0, "fitness_type": "float64"},
+            {"seq": "CGCTCCCTAAAAAAAAAAAA", "fitness": 5.0, "fitness_type": "float64"},
+            {"seq": "CTCTCCCTAAAAAAAAAAAA", "fitness": 5.0, "fitness_type": "float64"},
+            {"seq": "CTCGCACTAAAAAAAAAAAA", "fitness": 4.0, "fitness_type": "float64"},
         ],
         "samples": [
             "CACCTCACAAAAAAAAAAAA",
@@ -266,6 +266,11 @@ def test_adabeam_reference_eval_batch_size_consistency():
     assert np.array_equal(scores1, scores2)
     assert np.array_equal(scores1, scores4)
     assert np.array_equal(scores2, scores4)
+
+
+def test_adabeam_reference_child_fitness_matches_nucleobench_dtype():
+    adabeam = AdaBeamReference(**AdaBeamReference.debug_init_args())
+    assert all(type(n.fitness) is np.float64 for n in adabeam.current_nodes)
 
 
 @pytest.mark.skip(reason="Frozen Mac snapshots are not portable across platforms.")

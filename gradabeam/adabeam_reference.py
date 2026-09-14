@@ -237,6 +237,5 @@ class AdaBeamReference:
         for f in fitnesses:
             assert not np.isnan(f)
 
-        return [
-            RolloutNode(seq=seq, fitness=float(f)) for seq, f in zip(seqs, fitnesses)
-        ]
+        # Preserve the NucleoBench reference's NumPy scalar fitness type.
+        return [RolloutNode(seq=seq, fitness=f) for seq, f in zip(seqs, fitnesses)]

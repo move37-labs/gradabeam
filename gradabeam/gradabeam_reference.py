@@ -107,7 +107,8 @@ class GradaBeamReference:
         assert isinstance(start_sequence, str)
         seed_node = RolloutNode(
             seq=start_sequence,
-            fitness=0.0,
+            # Preserve the NucleoBench reference's seed scalar type.
+            fitness=np.float32(0.0),  # type: ignore[arg-type]
             edits_since_root=0,
             probs=None,
             pos_and_chars=None,
