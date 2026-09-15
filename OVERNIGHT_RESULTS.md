@@ -117,3 +117,20 @@ maximum time ratio 1.0115×. At equal proposal cost, minimum gain was 1.0000×
 and maximum time ratio 0.9988×. Raw repeated JSON is stored outside the source
 tree in `/private/tmp/audit_topk_*`; the reproduction document gives the
 commands.
+
+## Stage 3: historical unification and PBT audit
+
+Historical unification branches were inspected and executed in detached local
+worktrees. The position-space unified refactor `b10736e` replaces the split
+optimizers with 2,399 added lines and fails 24/81 tests under the current
+xxhash API; the action-space follow-up `0e2720a` changes 1,817 lines and fails
+26/81 tests for the same `xxhash.xxh64(str)` incompatibility. Both violate the
+conservative-unification size constraint and are rejected without transplant.
+
+The small historical PBT perturbation policy was recreated as isolated commit
+`233953d`: with probability 0.2 it multiplies the inherited rate by 0.8 or 1.2,
+clamps it, and uses a dedicated PBT RNG so mutation sampling is unaffected.
+Focused tests passed (11 passed, 3 skipped). Against current snap PBT over five
+seeds × three repeats, its workload timing reached 1.0865×/1.0849× on
+count-letter/substring, and its fixed-cost NK gain was 0.9516×. It is rejected;
+snap remains the production policy. Raw outputs are `/private/tmp/audit_pbt_*`.
