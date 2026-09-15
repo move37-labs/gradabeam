@@ -1,0 +1,24 @@
+{
+  "baseline": "a67a0902b2dc0ac68bddbaeff96425fefe0fde0f",
+  "stage": "draft infrastructure",
+  "promotion_median_ratios": {
+    "count_letter": {
+      "adabeam": {"gain": 1.0185, "seconds_per_step": 1.0351},
+      "gradabeam": {"gain": 1.0, "seconds_per_step": 0.9514}
+    },
+    "substring": {
+      "adabeam": {"gain": 1.0, "seconds_per_step": 1.0065},
+      "gradabeam": {"gain": 0.9924, "seconds_per_step": 1.0371}
+    },
+    "nk_five_landscapes_20_seeds": {
+      "adabeam": {"gain": 1.0, "seconds_per_step": 1.0117},
+      "gradabeam": {"gain": 0.9937, "seconds_per_step": 0.9388}
+    }
+  },
+  "dummy_3000_median_seconds_per_step": {
+    "adabeam": 0.157424,
+    "gradabeam_no_pbt": 0.251249,
+    "gradabeam_pbt": 0.04747
+  },
+  "note": "Raw trajectory artifacts are intentionally untracked; see AUDIT_REPRODUCTION.md."
+}

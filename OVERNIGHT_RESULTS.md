@@ -1,0 +1,94 @@
+# Overnight GrAdaBeam/AdaBeam Algorithm Audit
+
+## Scope and baseline
+
+- Audit branch: `overnight/gradabeam-algorithm-audit`
+- Detached baseline: `a67a0902b2dc0ac68bddbaeff96425fefe0fde0f`
+- No remote, cloud, merge, or reference-implementation operation was performed.
+- `gradabeam/adabeam_reference.py` and `gradabeam/gradabeam_reference.py` remain unchanged.
+
+The reusable local runner is `benchmarks/overnight_audit.py`. It records current
+beam and best-ever fitness, normalized gain, forward/TISM calls, unique
+evaluations, requested/actual Hamming edits, GrAdaBeam rate/alpha trajectories,
+and wall time. The tracked [compact summary](benchmarks/audit_summary.json) and
+[reproduction commands](benchmarks/AUDIT_REPRODUCTION.md) replace the former
+multi-megabyte raw trajectories; generate those under `/private/tmp`.
+
+## Accepted stack
+
+1. `70e642b` — deterministic, seed-derived ranking for ties. Ranking/getter
+   paths do not consume mutation RNG; this also removes process hash-order
+   dependence.
+2. `6ee1f57` — bounded unique best-ever archives, while retaining
+   `get_current_samples()` for current-beam access.
+3. `222e679` — immutable per-sequence raw TISM cache, no in-place mutation of
+   model-owned logits, correct rollout-length accumulation, explicit mutable
+   position/batch validation, and equality/hash consistency for transient node
+   state.
+4. The final typing-only follow-up casts NumPy edit counts to `int` in the
+   optimized GrAdaBeam path.
+
+The state/cache changes repair invariants. The archive changes result reporting
+only; proposal generation, oracle cache behavior, and current-beam selection
+remain distinct from archive retrieval.
+
+## Paired quality gates
+
+All benchmarks used beam size 4, four rollouts/root, max depth 30, fixed local
+oracle-cost behavior, and paired seeds. Median normalized-gain and per-step wall
+time ratios below are audit/baseline.
+
+| Task | Optimizer | Gain ratio | Time ratio |
+| --- | --- | ---: | ---: |
+| Count-letter (30 seeds) | AdaBeam | 1.0185 | 1.0351 |
+| Count-letter (30 seeds) | GrAdaBeam | 1.0000 | 0.9514 |
+| Substring (30 seeds) | AdaBeam | 1.0000 | 1.0065 |
+| Substring (30 seeds) | GrAdaBeam | 0.9924 | 1.0371 |
+| NK, five fixed landscapes × 20 seeds | AdaBeam | 1.0000 | 1.0117 |
+| NK, five fixed landscapes × 20 seeds | GrAdaBeam | 0.9937 | 0.9388 |
+
+Every measured task retained more than 98% of baseline median gain and had less
+than 5% median throughput regression. Five-seed smoke results for count-letter,
+additive, substring, and NK are also retained in the raw artifacts.
+
+## Timing
+
+The local 3,000-position count-letter dummy suite used three serial repeats of
+eight measured steps:
+
+| Configuration | Median seconds/step |
+| --- | ---: |
+| AdaBeam | 0.157424 |
+| GrAdaBeam, PBT disabled | 0.251249 |
+| GrAdaBeam, PBT enabled | 0.047470 |
+
+These are configuration timings, not cross-policy fitness comparisons. The
+optional local BPNet package was absent (`ModuleNotFoundError: bpnet`), so the
+ATAC directional validation was skipped rather than downloading/installing it.
+
+## Rejected candidate
+
+Sibling-action masking in GrAdaBeam was tested in a temporary isolated worktree.
+It was rejected before promotion: `TestGradientAlignment` failed and emitted an
+invalid probability-normalization warning on a degenerate distribution. The
+temporary worktree and branch were removed; no production mutation kernel was
+changed.
+
+The PBT snapping behavior and AdaBeam's legacy four-base mutation policy remain
+unchanged. In particular, no no-silent-edit AdaBeam setting was promoted without
+the requested mutation-rate retuning study.
+
+## Validation status and follow-up
+
+- `pytest -q`: **54 passed, 8 skipped**.
+- `ruff check .` and `ruff format --check .`: **passed**.
+- `mypy gradabeam`: two remaining errors in the intentionally untouched
+  `gradabeam/gradabeam_reference.py` at lines 326 and 332. The optimized paths
+  are type-clean; these are pre-existing reference-file annotations and were not
+  modified to preserve the byte-for-byte constraint.
+
+Recommended larger follow-up: run the same paired framework with a preinstalled
+local BPNet environment; separately test no-silent AdaBeam at corrected rates
+{0.75, 1.0, 1.25, 1.5, 2.0}; and only revisit position-level masking after a
+kernel that preserves finite probability mass and the gradient-alignment test is
+available.
