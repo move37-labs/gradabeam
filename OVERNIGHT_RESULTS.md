@@ -92,3 +92,28 @@ local BPNet environment; separately test no-silent AdaBeam at corrected rates
 {0.75, 1.0, 1.25, 1.5, 2.0}; and only revisit position-level masking after a
 kernel that preserves finite probability mass and the gradient-alignment test is
 available.
+
+## Stage 2: bounded ranking and fair-gate rerun
+
+Stage 1's full sort was a draft. The accepted replacement is a bounded
+`heapq.nsmallest` top-k ordered by fitness and a process-independent versioned
+seeded sequence hash, `xxh64(f"{sequence}\\0{seed + 1}")`. It does not consume
+mutation RNG. The evaluator now supports repeated fixed-workload runs and a
+post-initialization oracle-cost budget.
+
+The following isolated commits were tested against `a67a090` on count-letter,
+substring, and NK (five seeds, three repeats, 20 fixed-workload steps and a
+1,000 proposal-cost budget):
+
+| Candidate | Commit | Fixed-cost result | Decision |
+| --- | --- | --- | --- |
+| ascending `xxh64(seed, sequence)` | `12bcb64` | AdaBeam/count-letter 0.9643× gain | Reject |
+| reverse priority | `d60018c` | AdaBeam/count-letter 0.9643× gain | Reject |
+| sequence-first, unsalted | `4e0da83` | AdaBeam/count-letter 0.9643× gain | Reject |
+| sequence-first, version salt 1 | `0f5362a` | min gain 0.9848×; max time 1.0115× | Accept |
+
+The accepted candidate's equal-workload minimum gain ratio was 0.9848× and
+maximum time ratio 1.0115×. At equal proposal cost, minimum gain was 1.0000×
+and maximum time ratio 0.9988×. Raw repeated JSON is stored outside the source
+tree in `/private/tmp/audit_topk_*`; the reproduction document gives the
+commands.

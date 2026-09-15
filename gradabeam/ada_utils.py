@@ -1,6 +1,7 @@
 """Common utilities for [Gr]Ada*."""
 
 import dataclasses
+import heapq
 from collections.abc import Callable, Iterable
 from typing import Any, TypeVar
 
@@ -42,16 +43,27 @@ def stable_tie_priority(sequence: str, seed: int) -> int:
     depend on ``PYTHONHASHSEED``. xxhash gives a deterministic priority without
     touching the mutation generator.
     """
-    payload = f"{seed}\0{sequence}".encode()
+    # The fixed version salt makes tie policy explicit while retaining the
+    # optimizer seed in the process-independent priority.
+    payload = f"{sequence}\0{seed + 1}".encode()
     return xxhash.xxh64(payload).intdigest()
 
 
 def rank_nodes(nodes: Iterable[NodeT], limit: int, seed: int) -> list[NodeT]:
-    """Rank nodes by descending fitness with a stable seeded sequence tie-break."""
-    return sorted(
+    """Return a deterministic bounded top-k, without consuming mutation RNG.
+
+    ``heapq.nsmallest`` is O(n log k) for a beam of size ``k`` drawn from ``n``
+    candidates, rather than sorting every rollout candidate. The key is a total
+    ordering, so set iteration order and Python's randomized string hash cannot
+    affect a seeded result.
+    """
+    if limit <= 0:
+        return []
+    return heapq.nsmallest(
+        limit,
         nodes,
         key=lambda node: (-node.fitness, stable_tie_priority(node.seq, seed), node.seq),
-    )[:limit]
+    )
 
 
 def update_node_archive(

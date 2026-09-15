@@ -242,6 +242,8 @@ def run_trial(
     landscape_seed: int | None = None,
     sequence_length: int = 30,
     use_pbt: bool = True,
+    oracle_cost_budget: float | None = None,
+    repeat: int = 0,
 ) -> dict[str, Any]:
     model, start_sequence, upper_bound = make_task(
         task, seed if landscape_seed is None else landscape_seed, sequence_length
@@ -268,9 +270,14 @@ def run_trial(
     meter = _install_edit_meter(designer)
     for node in designer.current_nodes:
         meter["evaluated"][node.seq] = node
+    initial_oracle_cost = designer.model.cost
     trajectories: list[dict[str, Any]] = []
     started = time.perf_counter()
-    for step in range(steps):
+    step = 0
+    while step < steps and (
+        oracle_cost_budget is None
+        or designer.model.cost - initial_oracle_cost < oracle_cost_budget
+    ):
         designer.run(1)
         current_fitness = max(node.fitness for node in designer.current_nodes)
         archive = getattr(designer, "best_nodes", meter["evaluated"])
@@ -288,6 +295,7 @@ def run_trial(
                 node.exploration_alpha for node in designer.current_nodes
             ]
         trajectories.append(row)
+        step += 1
     wall_seconds = time.perf_counter() - started
     archive = getattr(designer, "best_nodes", meter["evaluated"])
     best_fitness = max(node.fitness for node in archive.values())
@@ -295,8 +303,10 @@ def run_trial(
         "task": task,
         "optimizer": optimizer,
         "seed": seed,
+        "repeat": repeat,
         "landscape_seed": landscape_seed,
-        "steps": steps,
+        "steps": step,
+        "requested_max_steps": steps,
         "sequence_length": sequence_length,
         "use_pbt": use_pbt if optimizer == "gradabeam" else None,
         "start_fitness": start_fitness,
@@ -306,6 +316,10 @@ def run_trial(
         / max(upper_bound - start_fitness, 1e-12),
         "forward_sequence_evaluations": model.string_evaluations,
         "tism_calls": model.tism_calls,
+        "initial_oracle_cost": initial_oracle_cost,
+        "oracle_cost": designer.model.cost,
+        "proposal_oracle_cost": designer.model.cost - initial_oracle_cost,
+        "oracle_cost_budget": oracle_cost_budget,
         "unique_evaluations": len(designer.model.cache),
         "requested_hamming_edits": meter["requested"],
         "actual_hamming_edits": meter["actual"],
@@ -326,6 +340,12 @@ def main() -> None:
     parser.add_argument("--optimizers", nargs="+", default=["adabeam", "gradabeam"])
     parser.add_argument("--seeds", nargs="+", type=int, default=list(range(5)))
     parser.add_argument("--steps", type=int, default=20)
+    parser.add_argument(
+        "--oracle-cost-budget",
+        type=float,
+        help="Stop each trial at this model-wrapper cost, subject to --steps.",
+    )
+    parser.add_argument("--repeats", type=int, default=1)
     parser.add_argument("--sequence-length", type=int, default=30)
     parser.add_argument(
         "--no-pbt", action="store_true", help="Disable GradaBeam PBT for a timing run."
@@ -345,10 +365,13 @@ def main() -> None:
             args.landscape_seed,
             args.sequence_length,
             not args.no_pbt,
+            args.oracle_cost_budget,
+            repeat,
         )
         for task in args.tasks
         for optimizer in args.optimizers
         for seed in args.seeds
+        for repeat in range(args.repeats)
     ]
     payload = {
         "source_dir": os.path.abspath(args.source_dir) if args.source_dir else None,
@@ -356,6 +379,8 @@ def main() -> None:
         "optimizers": args.optimizers,
         "seeds": args.seeds,
         "steps": args.steps,
+        "repeats": args.repeats,
+        "oracle_cost_budget": args.oracle_cost_budget,
         "sequence_length": args.sequence_length,
         "use_pbt": not args.no_pbt,
         "landscape_seed": args.landscape_seed,
