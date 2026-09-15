@@ -11,7 +11,7 @@ import random
 import numpy as np
 import pytest
 
-from gradabeam import testing_utils
+from gradabeam import ada_utils, testing_utils
 from gradabeam.adabeam_optimizer import AdaBeam
 
 
@@ -165,3 +165,14 @@ def test_adabeam_determinism_and_diversity():
     out3 = adabeam3.get_samples(10)
 
     assert out1 != out3
+
+
+def test_get_samples_returns_best_ever_separately_from_current_beam():
+    adabeam = AdaBeam(**AdaBeam.debug_init_args())
+    best = ada_utils.RolloutNode(seq="CCCCCC", fitness=10.0)
+    current = ada_utils.RolloutNode(seq="AAAAAA", fitness=1.0)
+    adabeam._record_evaluated([best])
+    adabeam.current_nodes = [current]
+
+    assert adabeam.get_samples(1) == [best.seq]
+    assert adabeam.get_current_samples(1) == [current.seq]

@@ -94,6 +94,8 @@ class GradaBeam:
         self.max_logit = max_logit
         self.debug = debug
         self._sampler_cache: dict[float, ada_utils.NumberEditsSampler] = {}
+        self._archive_limit = max(1000, beam_size * n_rollouts_per_root * 10)
+        self.best_nodes: dict[str, RolloutNode] = {}
 
         assert isinstance(start_sequence, str)
         seed_node = RolloutNode(
@@ -126,6 +128,9 @@ class GradaBeam:
                     [seed_node.mutations_per_sequence] * len(cur_num_edits),
                 )
             )
+
+    def _record_evaluated(self, nodes: list[RolloutNode]) -> None:
+        ada_utils.update_node_archive(self.best_nodes, nodes, self._archive_limit)
 
     def get_sampler(
         self, mutations_per_sequence: float
@@ -191,7 +196,13 @@ class GradaBeam:
                 )
 
     def get_samples(self, n_samples: int) -> list[str]:
-        """Get samples."""
+        """Return the best unique sequences evaluated over the whole run."""
+        limit = min(n_samples, len(self.best_nodes))
+        top_nodes = ada_utils.rank_nodes(self.best_nodes.values(), limit, self.rng_seed)
+        return [node.seq for node in top_nodes]
+
+    def get_current_samples(self, n_samples: int) -> list[str]:
+        """Return samples from the current beam, without changing optimizer state."""
         limit = min(n_samples, len(self.current_nodes))
         top_nodes = ada_utils.rank_nodes(self.current_nodes, limit, self.rng_seed)
         return [node.seq for node in top_nodes]
@@ -354,7 +365,7 @@ class GradaBeam:
 
         fitnesses = self.get_batched_fitness(seqs)
 
-        return [
+        children = [
             RolloutNode(
                 seq=seq,
                 fitness=float(f),
@@ -375,6 +386,8 @@ class GradaBeam:
                 child_alphas,
             )
         ]
+        self._record_evaluated(children)
+        return children
 
     # ... [Rest of file: probabilities_over_actions_from_tism, logits_to_probs] ...
     # (Functions below can remain identical to the original)

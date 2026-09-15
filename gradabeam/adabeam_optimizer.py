@@ -79,6 +79,8 @@ class AdaBeam:
 
         self.debug = debug
         self._edit_count_log: list[dict] = []
+        self._archive_limit = max(1000, beam_size * n_rollouts_per_root * 10)
+        self.best_nodes: dict[str, RolloutNode] = {}
 
         # Mutate a string to create a starting population.
         assert isinstance(start_sequence, str)
@@ -93,6 +95,9 @@ class AdaBeam:
                     cur_num_edits,
                 )
             )
+
+    def _record_evaluated(self, nodes: list[RolloutNode]) -> None:
+        ada_utils.update_node_archive(self.best_nodes, nodes, self._archive_limit)
 
     def get_batched_fitness(self, sequences: list[str]) -> np.ndarray:
         """Get fitness for a batch of sequences."""
@@ -194,7 +199,13 @@ class AdaBeam:
         print("=" * 62)
 
     def get_samples(self, n_samples: int) -> list[str]:
-        """Get samples."""
+        """Return the best unique sequences evaluated over the whole run."""
+        limit = min(n_samples, len(self.best_nodes))
+        top_nodes = ada_utils.rank_nodes(self.best_nodes.values(), limit, self.rng_seed)
+        return [node.seq for node in top_nodes]
+
+    def get_current_samples(self, n_samples: int) -> list[str]:
+        """Return samples from the current beam, without changing optimizer state."""
         limit = min(n_samples, len(self.current_nodes))
         top_nodes = ada_utils.rank_nodes(self.current_nodes, limit, self.rng_seed)
         return [node.seq for node in top_nodes]
@@ -287,6 +298,8 @@ class AdaBeam:
         for f in fitnesses:
             assert not np.isnan(f)
 
-        return [
+        children = [
             RolloutNode(seq=seq, fitness=float(f)) for seq, f in zip(seqs, fitnesses)
         ]
+        self._record_evaluated(children)
+        return children

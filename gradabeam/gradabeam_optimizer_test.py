@@ -9,7 +9,7 @@ pytest gradabeam/gradabeam_optimizer_test.py
 import numpy as np
 import pytest
 
-from gradabeam import testing_utils
+from gradabeam import ada_utils, testing_utils
 from gradabeam.gradabeam_optimizer import GradaBeam
 
 
@@ -108,6 +108,17 @@ def test_gradabeam_eval_batch_size_consistency():
     assert np.array_equal(scores1, scores2)
     assert np.array_equal(scores1, scores4)
     assert np.array_equal(scores2, scores4)
+
+
+def test_get_samples_returns_best_ever_separately_from_current_beam():
+    gradabeam = GradaBeam(**GradaBeam.debug_init_args())
+    best = ada_utils.RolloutNode(seq="CCCCCC", fitness=10.0)
+    current = ada_utils.RolloutNode(seq="AAAAAA", fitness=1.0)
+    gradabeam._record_evaluated([best])
+    gradabeam.current_nodes = [current]
+
+    assert gradabeam.get_samples(1) == [best.seq]
+    assert gradabeam.get_current_samples(1) == [current.seq]
 
 
 class TestGradientAlignment:

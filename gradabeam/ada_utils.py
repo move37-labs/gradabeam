@@ -54,6 +54,20 @@ def rank_nodes(nodes: Iterable[NodeT], limit: int, seed: int) -> list[NodeT]:
     )[:limit]
 
 
+def update_node_archive(
+    archive: dict[str, NodeT], nodes: Iterable[NodeT], limit: int
+) -> None:
+    """Keep the fittest unique evaluated nodes in a bounded archive."""
+    for node in nodes:
+        previous = archive.get(node.seq)
+        if previous is None or node.fitness > previous.fitness:
+            archive[node.seq] = node
+    if len(archive) > limit:
+        retained = rank_nodes(archive.values(), limit=limit, seed=0)
+        archive.clear()
+        archive.update({node.seq: node for node in retained})
+
+
 class ModelWrapper:
     def __init__(
         self,
