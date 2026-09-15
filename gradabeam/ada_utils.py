@@ -194,7 +194,10 @@ class ModelWrapper:
         # Use fast tensor-based TISM
         pos_and_chars_to_mutate, logits = self.model.get_tism(sequence, idxs)
 
-        logits *= -1  # Flip the sign, to conform to convention.
+        # A few model adapters reuse their output array. Never flip such an
+        # array in place: callers may cache it or otherwise treat it as raw
+        # model state.
+        logits = -np.array(logits, copy=True)  # Flip sign for maximization.
 
         return (pos_and_chars_to_mutate, logits)
 

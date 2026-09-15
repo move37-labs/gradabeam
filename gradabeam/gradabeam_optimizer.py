@@ -23,12 +23,14 @@ class RolloutNodeWithProbs(ada_utils.RolloutNode):
     pos_and_chars: PositionsAndCharactersType | None = field(
         default=None, hash=False, compare=False
     )
-    edits_since_root: int | None = None
+    edits_since_root: int | None = field(default=None, hash=False, compare=False)
     # [PBT Modification]:
     mutations_per_sequence: float = dataclasses.field(
-        default=1.0, compare=False, hash=True
+        default=1.0, compare=False, hash=False
     )
-    exploration_alpha: float = dataclasses.field(default=0.05, compare=False, hash=True)
+    exploration_alpha: float = dataclasses.field(
+        default=0.05, compare=False, hash=False
+    )
 
 
 RolloutNode = RolloutNodeWithProbs
@@ -54,8 +56,10 @@ class GradaBeam:
         eval_batch_size: int = 1,
         debug: bool = False,
     ):
-        self.positions_to_mutate = positions_to_mutate or list(
-            range(len(start_sequence))
+        self.positions_to_mutate = (
+            list(range(len(start_sequence)))
+            if positions_to_mutate is None
+            else list(positions_to_mutate)
         )
         self.tism_positions = (
             None
@@ -63,12 +67,19 @@ class GradaBeam:
             else self.positions_to_mutate
         )
 
+        if not self.positions_to_mutate:
+            raise ValueError("positions_to_mutate must not be empty.")
+        if len(set(self.positions_to_mutate)) != len(self.positions_to_mutate):
+            raise ValueError("positions_to_mutate must not contain duplicates.")
         assert min(self.positions_to_mutate) >= 0
         assert max(self.positions_to_mutate) < len(start_sequence)
         assert mutations_per_sequence > 0
+        assert mutations_per_sequence <= len(self.positions_to_mutate)
         assert beam_size > 0
         assert n_rollouts_per_root > 0
         assert exploration_alpha >= 0 and exploration_alpha <= 1
+        if eval_batch_size != 1:
+            raise ValueError("GradaBeam currently requires eval_batch_size=1.")
 
         self.exploration_alpha = exploration_alpha
         self.use_pbt = use_pbt
@@ -94,6 +105,7 @@ class GradaBeam:
         self.max_logit = max_logit
         self.debug = debug
         self._sampler_cache: dict[float, ada_utils.NumberEditsSampler] = {}
+        self._tism_cache: dict[str, tuple[tuple[tuple[int, str], ...], np.ndarray]] = {}
         self._archive_limit = max(1000, beam_size * n_rollouts_per_root * 10)
         self.best_nodes: dict[str, RolloutNode] = {}
 
@@ -229,9 +241,11 @@ class GradaBeam:
                 parent_nodes = self.initialize_roots_with_gradients(parent_nodes)
                 gradient_node_cache[parent_seq] = parent_nodes[0]
 
-            cur_nodes_visited, rollout_lengths = self.rollout(parent_nodes=parent_nodes)
+            cur_nodes_visited, cur_rollout_lengths = self.rollout(
+                parent_nodes=parent_nodes
+            )
             nodes_visited.update(cur_nodes_visited)
-            rollout_lengths.extend(rollout_lengths)
+            rollout_lengths.extend(cur_rollout_lengths)
 
         if len(nodes_visited) == 0:
             raise ValueError("No nodes generated.")
@@ -397,20 +411,28 @@ class GradaBeam:
         # ... [Same as original] ...
         probs_list, pos_and_chars_list = [], []
         for n in nodes:
-            pos_and_chars, logits = self.model.get_tism(
-                sequence=n.seq, idxs=self.tism_positions, debug=self.debug
-            )
+            cached = self._tism_cache.get(n.seq)
+            if cached is None:
+                pos_and_chars, logits = self.model.get_tism(
+                    sequence=n.seq, idxs=self.tism_positions, debug=self.debug
+                )
+                raw_logits = np.array(logits, copy=True)
+                raw_logits.setflags(write=False)
+                cached = (tuple(pos_and_chars), raw_logits)
+                self._tism_cache[n.seq] = cached
+            raw_pos_and_chars, raw_logits = cached
+            pos_and_chars = list(raw_pos_and_chars)
             # Make sure `pos_to_mutate` is respected.
             assert len(pos_and_chars) == 3 * len(self.positions_to_mutate), (
                 len(pos_and_chars),
                 len(self.positions_to_mutate),
                 self.tism_positions,
             )
-            assert len(pos_and_chars) == len(logits)
+            assert len(pos_and_chars) == len(raw_logits)
 
             # 2. Compute Probabilities
             # This handles Temperature, Stability, and Exploration in one step.
-            probs = self.logits_to_probs(logits, n.exploration_alpha)
+            probs = self.logits_to_probs(raw_logits, n.exploration_alpha)
             probs_list.append(probs)
             pos_and_chars_list.append(pos_and_chars)
         return probs_list, pos_and_chars_list

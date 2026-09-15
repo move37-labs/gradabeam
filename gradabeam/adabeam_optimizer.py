@@ -48,9 +48,15 @@ class AdaBeam:
             max_rollout_len: Maximum number of rollouts to perform per parent node.
             debug: If `True`, print debug information.
         """
-        self.positions_to_mutate = positions_to_mutate or list(
-            range(len(start_sequence))
+        self.positions_to_mutate = (
+            list(range(len(start_sequence)))
+            if positions_to_mutate is None
+            else list(positions_to_mutate)
         )
+        if not self.positions_to_mutate:
+            raise ValueError("positions_to_mutate must not be empty.")
+        if len(set(self.positions_to_mutate)) != len(self.positions_to_mutate):
+            raise ValueError("positions_to_mutate must not contain duplicates.")
         assert min(self.positions_to_mutate) >= 0
         assert max(self.positions_to_mutate) < len(start_sequence)
 

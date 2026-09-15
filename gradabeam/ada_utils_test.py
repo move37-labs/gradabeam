@@ -107,6 +107,25 @@ def test_no_tism_cost_fail():
         model.get_tism("ACAAA", idxs=None)
 
 
+def test_get_tism_does_not_modify_model_owned_logits():
+    class ReusingTismOutput(testing_utils.CountLetterModel):
+        def __init__(self):
+            super().__init__()
+            self.logits = np.array([1.0, -2.0], dtype=np.float32)
+
+        def get_tism(self, sequence, idxs):
+            del sequence, idxs
+            return [(0, "C"), (0, "G")], self.logits
+
+    source = ReusingTismOutput()
+    wrapper = ada_utils.ModelWrapper(source, tism_cost=1.0)
+
+    _, logits = wrapper.get_tism("A")
+
+    np.testing.assert_array_equal(source.logits, [1.0, -2.0])
+    np.testing.assert_array_equal(logits, [-1.0, 2.0])
+
+
 @pytest.mark.parametrize("idx_option", [None, "all", "skipC", "includeC"])
 def test_get_tisms_basic(idx_option):
     """Test basic functionality of get_tism."""
