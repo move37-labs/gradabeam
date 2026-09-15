@@ -80,7 +80,7 @@ the requested mutation-rate retuning study.
 
 ## Validation status and follow-up
 
-- `pytest -q`: **54 passed, 8 skipped**.
+- `pytest -q`: **55 passed, 8 skipped**.
 - `ruff check .` and `ruff format --check .`: **passed**.
 - `mypy gradabeam`: two remaining errors in the intentionally untouched
   `gradabeam/gradabeam_reference.py` at lines 326 and 332. The optimized paths
