@@ -158,3 +158,17 @@ budgets:
 
 These are screen results (one repeat per seed); none qualified for the larger
 repeated promotion gate. Raw outputs are `/private/tmp/audit_adabeam_*`.
+
+## Stage 5: corrected sibling-action masking rerun
+
+The earlier masking experiment was rerun as isolated commit `c5581ec`, fixing
+the final-step zero-normalization bug. It samples one action at a time, masks
+all sibling actions for each selected position, and carries a deterministic
+gradient-alignment test plus a distinct-position Hamming-edit test. Focused
+tests passed (10 passed, 3 skipped).
+
+Against the accepted action-space kernel (five seeds × three repeats), the
+candidate failed both gates: equal-workload gain ratios were 1.0000,
+0.9846, and 0.9651 for count-letter, substring, and NK, with up to 1.1101×
+time; fixed-cost ratios were 1.0000, 0.9773, and 0.9974 with up to 1.1396×
+time. It is rejected. Raw outputs are `/private/tmp/audit_action_*`.
