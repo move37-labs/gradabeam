@@ -328,8 +328,8 @@ class GradaBeam:
         for node, num_edits in zip(nodes, num_edit_locs):
             assert node.probs is not None
             assert node.pos_and_chars is not None
-            num_available = (node.probs > 0).sum()
-            effective_num_edits = min(num_edits, num_available)
+            num_available = int((node.probs > 0).sum())
+            effective_num_edits = int(min(num_edits, num_available))
             assert effective_num_edits > 0
             num_edits_effective.append(effective_num_edits)
 
