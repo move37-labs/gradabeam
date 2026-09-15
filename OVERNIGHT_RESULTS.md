@@ -134,3 +134,27 @@ Focused tests passed (11 passed, 3 skipped). Against current snap PBT over five
 seeds × three repeats, its workload timing reached 1.0865×/1.0849× on
 count-letter/substring, and its fixed-cost NK gain was 0.9516×. It is rejected;
 snap remains the production policy. Raw outputs are `/private/tmp/audit_pbt_*`.
+
+## Stage 4: AdaBeam silent-edit audit
+
+Candidate commits `5124b04` and `6137f1c` add an opt-in no-silent mutation
+operator and sweep harness. Its correctness test passed (three requested edits
+produce exactly three Hamming changes). The legacy policy's three-repeat
+workload baseline had 1.5824 requested versus 1.1825 actual edits on average
+(0.7473 actual/requested; 9,360 silent proposals); no-silent mode was exactly
+1.0 with zero silent proposals.
+
+No corrected rate cleared the quality screen. Each used count-letter,
+substring, and NK with five seeds under fixed workload and 1,000 proposal-cost
+budgets:
+
+| Corrected rate | Workload min gain ratio | Fixed-cost min gain ratio | Decision |
+| ---: | ---: | ---: | --- |
+| 0.75 | 0.879 | 0.902 | Reject |
+| 1.00 | 0.865 | 0.903 | Reject |
+| 1.25 | 0.905 | 0.929 | Reject |
+| 1.50 | 0.861 | 0.878 | Reject |
+| 2.00 | 0.846 | 0.893 | Reject |
+
+These are screen results (one repeat per seed); none qualified for the larger
+repeated promotion gate. Raw outputs are `/private/tmp/audit_adabeam_*`.
