@@ -172,3 +172,29 @@ candidate failed both gates: equal-workload gain ratios were 1.0000,
 0.9846, and 0.9651 for count-letter, substring, and NK, with up to 1.1101×
 time; fixed-cost ratios were 1.0000, 0.9773, and 0.9974 with up to 1.1396×
 time. It is rejected. Raw outputs are `/private/tmp/audit_action_*`.
+
+## Stage 6: minimal position-space kernel rerun
+
+Candidate `04c3c20` is the conservative position-space counterpart to the
+historical unified implementation: it marginalizes action probabilities by
+position, samples distinct positions without replacement, uses a uniform
+alternative base, masks all selected positions, and computes α posterior from
+position rather than action probability. Its first implementation exposed a
+stale-action lookup failure; the repaired candidate passes focused tests (10
+passed, 3 skipped).
+
+It does not clear empirical gates. Across five seeds × three repeats, equal
+workload timing was 2.7077× on count-letter, 1.7386× on substring, and 1.0938×
+on NK. At equal proposal cost, substring gain was 0.9773× and NK gain 0.9249×,
+with 1.70–2.66× timing. Reject it and retain action-space GrAdaBeam. Raw
+outputs are `/private/tmp/audit_position_*`.
+
+## Audit checklist status
+
+All locally executable checklist items were attempted: bounded deterministic
+ranking; repeated equal-workload and fixed-cost gates; compact artifact
+replacement; both historical unification snapshots; corrected sibling-action
+and position-space reruns; AdaBeam no-silent mutation-rate sweep; and PBT
+snap/perturb comparison. Only the bounded top-k ranking was promoted. No
+external dependency or cloud action was used; BPNet remains the sole skipped
+directional check because its optional package is unavailable locally.
