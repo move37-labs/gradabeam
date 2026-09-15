@@ -4,7 +4,6 @@ Adaptive beam, adaptive mutation rate, adaptive directed evolution.
 """
 
 import collections
-import heapq
 from typing import Any
 
 import numpy as np
@@ -197,9 +196,7 @@ class AdaBeam:
     def get_samples(self, n_samples: int) -> list[str]:
         """Get samples."""
         limit = min(n_samples, len(self.current_nodes))
-        top_nodes = heapq.nlargest(
-            limit, self.current_nodes, key=lambda node: node.fitness
-        )
+        top_nodes = ada_utils.rank_nodes(self.current_nodes, limit, self.rng_seed)
         return [node.seq for node in top_nodes]
 
     def propose_sequences(self, root_nodes: list[RolloutNode]) -> list[RolloutNode]:
@@ -250,13 +247,7 @@ class AdaBeam:
         if len(sequences) == 0:
             raise ValueError("No sequences generated.")
 
-        # Keep beam selection independent of the mutation RNG.  ``nlargest`` is
-        # stable for equal keys, matching ``sorted(..., reverse=True)[:k]`` while
-        # avoiding a full sort when the beam is much smaller than the candidate
-        # set.
-        top_nodes = heapq.nlargest(
-            self.beam_size, sequences, key=lambda node: node.fitness
-        )
+        top_nodes = ada_utils.rank_nodes(sequences, self.beam_size, self.rng_seed)
 
         return top_nodes
 

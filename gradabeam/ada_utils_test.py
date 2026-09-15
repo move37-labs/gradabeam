@@ -25,6 +25,25 @@ PARAMS_TO_TEST_ = [
 LIKELIHOOD_FNS_ = [ada_utils.num_edits_likelihood_adabeam]
 
 
+@pytest.mark.parametrize("seed", [0, 17])
+def test_rank_nodes_uses_seeded_process_independent_ties(seed):
+    nodes = [
+        ada_utils.RolloutNode(seq="TTTT", fitness=1.0),
+        ada_utils.RolloutNode(seq="AAAA", fitness=1.0),
+        ada_utils.RolloutNode(seq="CCCC", fitness=2.0),
+    ]
+
+    ranked = ada_utils.rank_nodes(nodes, limit=3, seed=seed)
+
+    assert ranked[0].seq == "CCCC"
+    assert [node.seq for node in ranked[1:]] == [
+        node.seq
+        for node in sorted(
+            nodes[:2], key=lambda node: ada_utils.stable_tie_priority(node.seq, seed)
+        )
+    ]
+
+
 @pytest.mark.parametrize("likelihood_fn", LIKELIHOOD_FNS_)
 def test_num_edits_likelihood_legacy_prob_dist(likelihood_fn):
     for sequence_length, mutation_rate in PARAMS_TO_TEST_:

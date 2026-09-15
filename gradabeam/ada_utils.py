@@ -1,8 +1,8 @@
 """Common utilities for [Gr]Ada*."""
 
 import dataclasses
-from collections.abc import Callable
-from typing import Any
+from collections.abc import Callable, Iterable
+from typing import Any, TypeVar
 
 import numpy as np
 import torch
@@ -13,6 +13,7 @@ from gradabeam import opt_utils
 
 PositionsAndCharactersType = list[tuple[int, str]]
 LogitsType = np.ndarray
+NodeT = TypeVar("NodeT", bound="RolloutNode")
 
 
 @dataclasses.dataclass(frozen=True)
@@ -31,6 +32,26 @@ class RolloutNode:
 
     seq: str
     fitness: float
+
+
+def stable_tie_priority(sequence: str, seed: int) -> int:
+    """Return a process-independent priority for fitness ties.
+
+    Python's string hash is deliberately randomized between processes. Optimizer
+    candidate collections are sets, so using it to break ties makes a seeded run
+    depend on ``PYTHONHASHSEED``. xxhash gives a deterministic priority without
+    touching the mutation generator.
+    """
+    payload = f"{seed}\0{sequence}".encode()
+    return xxhash.xxh64(payload).intdigest()
+
+
+def rank_nodes(nodes: Iterable[NodeT], limit: int, seed: int) -> list[NodeT]:
+    """Rank nodes by descending fitness with a stable seeded sequence tie-break."""
+    return sorted(
+        nodes,
+        key=lambda node: (-node.fitness, stable_tie_priority(node.seq, seed), node.seq),
+    )[:limit]
 
 
 class ModelWrapper:

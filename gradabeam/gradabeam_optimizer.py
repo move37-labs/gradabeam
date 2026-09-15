@@ -4,7 +4,6 @@ Gradient-guided adaptive beam, adaptive mutation rate (PBT), adaptive directed e
 """
 
 import dataclasses
-import heapq
 from dataclasses import field
 from typing import Any
 
@@ -194,9 +193,7 @@ class GradaBeam:
     def get_samples(self, n_samples: int) -> list[str]:
         """Get samples."""
         limit = min(n_samples, len(self.current_nodes))
-        top_nodes = heapq.nlargest(
-            limit, self.current_nodes, key=lambda node: node.fitness
-        )
+        top_nodes = ada_utils.rank_nodes(self.current_nodes, limit, self.rng_seed)
         return [node.seq for node in top_nodes]
 
     def propose_sequences(self, root_nodes: list[RolloutNode]) -> list[RolloutNode]:
@@ -228,12 +225,8 @@ class GradaBeam:
         if len(nodes_visited) == 0:
             raise ValueError("No nodes generated.")
 
-        # Keep beam selection independent of the mutation RNG.  ``nlargest`` is
-        # stable for equal keys, matching ``sorted(..., reverse=True)[:k]`` while
-        # avoiding a full sort when the beam is much smaller than the candidate
-        # set.
-        top_nodes = heapq.nlargest(
-            self.beam_size, nodes_visited, key=lambda node: node.fitness
+        top_nodes = ada_utils.rank_nodes(
+            list(nodes_visited), self.beam_size, self.rng_seed
         )
 
         return top_nodes
