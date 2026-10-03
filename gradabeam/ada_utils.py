@@ -1,8 +1,9 @@
 """Common utilities for [Gr]Ada*."""
 
 import dataclasses
-from collections.abc import Callable
-from typing import Any
+import heapq
+from collections.abc import Callable, Iterable
+from typing import Any, TypeVar
 
 import numpy as np
 import torch
@@ -13,6 +14,7 @@ from gradabeam import opt_utils
 
 PositionsAndCharactersType = list[tuple[int, str]]
 LogitsType = np.ndarray
+NodeT = TypeVar("NodeT", bound="RolloutNode")
 
 
 @dataclasses.dataclass(frozen=True)
@@ -31,6 +33,51 @@ class RolloutNode:
 
     seq: str
     fitness: float
+
+
+def stable_tie_priority(sequence: str, seed: int) -> int:
+    """Return a process-independent priority for fitness ties.
+
+    Python's string hash is deliberately randomized between processes. Optimizer
+    candidate collections are sets, so using it to break ties makes a seeded run
+    depend on ``PYTHONHASHSEED``. xxhash gives a deterministic priority without
+    touching the mutation generator.
+    """
+    # The fixed version salt makes tie policy explicit while retaining the
+    # optimizer seed in the process-independent priority.
+    payload = f"{sequence}\0{seed + 1}".encode()
+    return xxhash.xxh64(payload).intdigest()
+
+
+def rank_nodes(nodes: Iterable[NodeT], limit: int, seed: int) -> list[NodeT]:
+    """Return a deterministic bounded top-k, without consuming mutation RNG.
+
+    ``heapq.nsmallest`` is O(n log k) for a beam of size ``k`` drawn from ``n``
+    candidates, rather than sorting every rollout candidate. The key is a total
+    ordering, so set iteration order and Python's randomized string hash cannot
+    affect a seeded result.
+    """
+    if limit <= 0:
+        return []
+    return heapq.nsmallest(
+        limit,
+        nodes,
+        key=lambda node: (-node.fitness, stable_tie_priority(node.seq, seed), node.seq),
+    )
+
+
+def update_node_archive(
+    archive: dict[str, NodeT], nodes: Iterable[NodeT], limit: int
+) -> None:
+    """Keep the fittest unique evaluated nodes in a bounded archive."""
+    for node in nodes:
+        previous = archive.get(node.seq)
+        if previous is None or node.fitness > previous.fitness:
+            archive[node.seq] = node
+    if len(archive) > limit:
+        retained = rank_nodes(archive.values(), limit=limit, seed=0)
+        archive.clear()
+        archive.update({node.seq: node for node in retained})
 
 
 class ModelWrapper:
@@ -159,7 +206,10 @@ class ModelWrapper:
         # Use fast tensor-based TISM
         pos_and_chars_to_mutate, logits = self.model.get_tism(sequence, idxs)
 
-        logits *= -1  # Flip the sign, to conform to convention.
+        # A few model adapters reuse their output array. Never flip such an
+        # array in place: callers may cache it or otherwise treat it as raw
+        # model state.
+        logits = -np.array(logits, copy=True)  # Flip sign for maximization.
 
         return (pos_and_chars_to_mutate, logits)
 

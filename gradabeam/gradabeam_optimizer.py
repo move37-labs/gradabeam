@@ -4,7 +4,6 @@ Gradient-guided adaptive beam, adaptive mutation rate (PBT), adaptive directed e
 """
 
 import dataclasses
-import heapq
 from dataclasses import field
 from typing import Any
 
@@ -24,12 +23,14 @@ class RolloutNodeWithProbs(ada_utils.RolloutNode):
     pos_and_chars: PositionsAndCharactersType | None = field(
         default=None, hash=False, compare=False
     )
-    edits_since_root: int | None = None
+    edits_since_root: int | None = field(default=None, hash=False, compare=False)
     # [PBT Modification]:
     mutations_per_sequence: float = dataclasses.field(
-        default=1.0, compare=False, hash=True
+        default=1.0, compare=False, hash=False
     )
-    exploration_alpha: float = dataclasses.field(default=0.05, compare=False, hash=True)
+    exploration_alpha: float = dataclasses.field(
+        default=0.05, compare=False, hash=False
+    )
 
 
 RolloutNode = RolloutNodeWithProbs
@@ -55,8 +56,10 @@ class GradaBeam:
         eval_batch_size: int = 1,
         debug: bool = False,
     ):
-        self.positions_to_mutate = positions_to_mutate or list(
-            range(len(start_sequence))
+        self.positions_to_mutate = (
+            list(range(len(start_sequence)))
+            if positions_to_mutate is None
+            else list(positions_to_mutate)
         )
         self.tism_positions = (
             None
@@ -64,12 +67,19 @@ class GradaBeam:
             else self.positions_to_mutate
         )
 
+        if not self.positions_to_mutate:
+            raise ValueError("positions_to_mutate must not be empty.")
+        if len(set(self.positions_to_mutate)) != len(self.positions_to_mutate):
+            raise ValueError("positions_to_mutate must not contain duplicates.")
         assert min(self.positions_to_mutate) >= 0
         assert max(self.positions_to_mutate) < len(start_sequence)
         assert mutations_per_sequence > 0
+        assert mutations_per_sequence <= len(self.positions_to_mutate)
         assert beam_size > 0
         assert n_rollouts_per_root > 0
         assert exploration_alpha >= 0 and exploration_alpha <= 1
+        if eval_batch_size != 1:
+            raise ValueError("GradaBeam currently requires eval_batch_size=1.")
 
         self.exploration_alpha = exploration_alpha
         self.use_pbt = use_pbt
@@ -95,6 +105,9 @@ class GradaBeam:
         self.max_logit = max_logit
         self.debug = debug
         self._sampler_cache: dict[float, ada_utils.NumberEditsSampler] = {}
+        self._tism_cache: dict[str, tuple[tuple[tuple[int, str], ...], np.ndarray]] = {}
+        self._archive_limit = max(1000, beam_size * n_rollouts_per_root * 10)
+        self.best_nodes: dict[str, RolloutNode] = {}
 
         assert isinstance(start_sequence, str)
         seed_node = RolloutNode(
@@ -127,6 +140,9 @@ class GradaBeam:
                     [seed_node.mutations_per_sequence] * len(cur_num_edits),
                 )
             )
+
+    def _record_evaluated(self, nodes: list[RolloutNode]) -> None:
+        ada_utils.update_node_archive(self.best_nodes, nodes, self._archive_limit)
 
     def get_sampler(
         self, mutations_per_sequence: float
@@ -192,11 +208,15 @@ class GradaBeam:
                 )
 
     def get_samples(self, n_samples: int) -> list[str]:
-        """Get samples."""
+        """Return the best unique sequences evaluated over the whole run."""
+        limit = min(n_samples, len(self.best_nodes))
+        top_nodes = ada_utils.rank_nodes(self.best_nodes.values(), limit, self.rng_seed)
+        return [node.seq for node in top_nodes]
+
+    def get_current_samples(self, n_samples: int) -> list[str]:
+        """Return samples from the current beam, without changing optimizer state."""
         limit = min(n_samples, len(self.current_nodes))
-        top_nodes = heapq.nlargest(
-            limit, self.current_nodes, key=lambda node: node.fitness
-        )
+        top_nodes = ada_utils.rank_nodes(self.current_nodes, limit, self.rng_seed)
         return [node.seq for node in top_nodes]
 
     def propose_sequences(self, root_nodes: list[RolloutNode]) -> list[RolloutNode]:
@@ -221,19 +241,17 @@ class GradaBeam:
                 parent_nodes = self.initialize_roots_with_gradients(parent_nodes)
                 gradient_node_cache[parent_seq] = parent_nodes[0]
 
-            cur_nodes_visited, rollout_lengths = self.rollout(parent_nodes=parent_nodes)
+            cur_nodes_visited, cur_rollout_lengths = self.rollout(
+                parent_nodes=parent_nodes
+            )
             nodes_visited.update(cur_nodes_visited)
-            rollout_lengths.extend(rollout_lengths)
+            rollout_lengths.extend(cur_rollout_lengths)
 
         if len(nodes_visited) == 0:
             raise ValueError("No nodes generated.")
 
-        # Keep beam selection independent of the mutation RNG.  ``nlargest`` is
-        # stable for equal keys, matching ``sorted(..., reverse=True)[:k]`` while
-        # avoiding a full sort when the beam is much smaller than the candidate
-        # set.
-        top_nodes = heapq.nlargest(
-            self.beam_size, nodes_visited, key=lambda node: node.fitness
+        top_nodes = ada_utils.rank_nodes(
+            list(nodes_visited), self.beam_size, self.rng_seed
         )
 
         return top_nodes
@@ -310,8 +328,8 @@ class GradaBeam:
         for node, num_edits in zip(nodes, num_edit_locs):
             assert node.probs is not None
             assert node.pos_and_chars is not None
-            num_available = (node.probs > 0).sum()
-            effective_num_edits = min(num_edits, num_available)
+            num_available = int((node.probs > 0).sum())
+            effective_num_edits = int(min(num_edits, num_available))
             assert effective_num_edits > 0
             num_edits_effective.append(effective_num_edits)
 
@@ -361,7 +379,7 @@ class GradaBeam:
 
         fitnesses = self.get_batched_fitness(seqs)
 
-        return [
+        children = [
             RolloutNode(
                 seq=seq,
                 fitness=float(f),
@@ -382,6 +400,8 @@ class GradaBeam:
                 child_alphas,
             )
         ]
+        self._record_evaluated(children)
+        return children
 
     # ... [Rest of file: probabilities_over_actions_from_tism, logits_to_probs] ...
     # (Functions below can remain identical to the original)
@@ -391,20 +411,28 @@ class GradaBeam:
         # ... [Same as original] ...
         probs_list, pos_and_chars_list = [], []
         for n in nodes:
-            pos_and_chars, logits = self.model.get_tism(
-                sequence=n.seq, idxs=self.tism_positions, debug=self.debug
-            )
+            cached = self._tism_cache.get(n.seq)
+            if cached is None:
+                pos_and_chars, logits = self.model.get_tism(
+                    sequence=n.seq, idxs=self.tism_positions, debug=self.debug
+                )
+                raw_logits = np.array(logits, copy=True)
+                raw_logits.setflags(write=False)
+                cached = (tuple(pos_and_chars), raw_logits)
+                self._tism_cache[n.seq] = cached
+            raw_pos_and_chars, raw_logits = cached
+            pos_and_chars = list(raw_pos_and_chars)
             # Make sure `pos_to_mutate` is respected.
             assert len(pos_and_chars) == 3 * len(self.positions_to_mutate), (
                 len(pos_and_chars),
                 len(self.positions_to_mutate),
                 self.tism_positions,
             )
-            assert len(pos_and_chars) == len(logits)
+            assert len(pos_and_chars) == len(raw_logits)
 
             # 2. Compute Probabilities
             # This handles Temperature, Stability, and Exploration in one step.
-            probs = self.logits_to_probs(logits, n.exploration_alpha)
+            probs = self.logits_to_probs(raw_logits, n.exploration_alpha)
             probs_list.append(probs)
             pos_and_chars_list.append(pos_and_chars)
         return probs_list, pos_and_chars_list

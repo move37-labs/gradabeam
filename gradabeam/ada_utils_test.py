@@ -25,6 +25,36 @@ PARAMS_TO_TEST_ = [
 LIKELIHOOD_FNS_ = [ada_utils.num_edits_likelihood_adabeam]
 
 
+@pytest.mark.parametrize("seed", [0, 17])
+def test_rank_nodes_uses_seeded_process_independent_ties(seed):
+    nodes = [
+        ada_utils.RolloutNode(seq="TTTT", fitness=1.0),
+        ada_utils.RolloutNode(seq="AAAA", fitness=1.0),
+        ada_utils.RolloutNode(seq="CCCC", fitness=2.0),
+    ]
+
+    ranked = ada_utils.rank_nodes(nodes, limit=3, seed=seed)
+
+    assert ranked[0].seq == "CCCC"
+    assert [node.seq for node in ranked[1:]] == [
+        node.seq
+        for node in sorted(
+            nodes[:2], key=lambda node: ada_utils.stable_tie_priority(node.seq, seed)
+        )
+    ]
+
+
+def test_rank_nodes_accepts_a_generator_and_zero_limit():
+    nodes = [
+        ada_utils.RolloutNode(seq="AAAA", fitness=0.0),
+        ada_utils.RolloutNode(seq="CCCC", fitness=2.0),
+        ada_utils.RolloutNode(seq="GGGG", fitness=1.0),
+    ]
+
+    assert ada_utils.rank_nodes(iter(nodes), limit=2, seed=4) == [nodes[1], nodes[2]]
+    assert ada_utils.rank_nodes(iter(nodes), limit=0, seed=4) == []
+
+
 @pytest.mark.parametrize("likelihood_fn", LIKELIHOOD_FNS_)
 def test_num_edits_likelihood_legacy_prob_dist(likelihood_fn):
     for sequence_length, mutation_rate in PARAMS_TO_TEST_:
@@ -86,6 +116,25 @@ def test_no_tism_cost_fail():
     model = ada_utils.ModelWrapper(model_fn)
     with pytest.raises(ValueError):
         model.get_tism("ACAAA", idxs=None)
+
+
+def test_get_tism_does_not_modify_model_owned_logits():
+    class ReusingTismOutput(testing_utils.CountLetterModel):
+        def __init__(self):
+            super().__init__()
+            self.logits = np.array([1.0, -2.0], dtype=np.float32)
+
+        def get_tism(self, sequence, idxs):
+            del sequence, idxs
+            return [(0, "C"), (0, "G")], self.logits
+
+    source = ReusingTismOutput()
+    wrapper = ada_utils.ModelWrapper(source, tism_cost=1.0)
+
+    _, logits = wrapper.get_tism("A")
+
+    np.testing.assert_array_equal(source.logits, [1.0, -2.0])
+    np.testing.assert_array_equal(logits, [-1.0, 2.0])
 
 
 @pytest.mark.parametrize("idx_option", [None, "all", "skipC", "includeC"])

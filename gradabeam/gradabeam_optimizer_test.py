@@ -9,7 +9,7 @@ pytest gradabeam/gradabeam_optimizer_test.py
 import numpy as np
 import pytest
 
-from gradabeam import testing_utils
+from gradabeam import ada_utils, testing_utils
 from gradabeam.gradabeam_optimizer import GradaBeam
 
 
@@ -80,34 +80,48 @@ def test_gradabeam_eval_batch_size_sanity(eval_batch_size):
     # Add correctness checks.
 
 
-def test_gradabeam_eval_batch_size_consistency():
-    """Test that `eval_batch_size` is consistent."""
-    model_fn = testing_utils.CountLetterModel()
-
-    seqs = [
-        "".join(np.random.choice(["A", "G", "T", "C"], size=100)) for _ in range(10)
-    ]
-
+@pytest.mark.parametrize("eval_batch_size", [2, 4])
+def test_gradabeam_rejects_unsupported_eval_batch_sizes(eval_batch_size):
     kwargs = GradaBeam.debug_init_args()
-    kwargs["model_fn"] = model_fn
-    kwargs["start_sequence"] = "A" * 100
+    kwargs["eval_batch_size"] = eval_batch_size
 
-    kwargs["eval_batch_size"] = 1
-    gradabeam_1 = GradaBeam(**kwargs)
+    with pytest.raises(ValueError, match="eval_batch_size=1"):
+        GradaBeam(**kwargs)
 
-    kwargs["eval_batch_size"] = 2
-    gradabeam_2 = GradaBeam(**kwargs)
 
-    kwargs["eval_batch_size"] = 4
-    gradabeam_4 = GradaBeam(**kwargs)
+def test_get_samples_returns_best_ever_separately_from_current_beam():
+    gradabeam = GradaBeam(**GradaBeam.debug_init_args())
+    best = ada_utils.RolloutNode(seq="CCCCCC", fitness=10.0)
+    current = ada_utils.RolloutNode(seq="AAAAAA", fitness=1.0)
+    gradabeam._record_evaluated([best])
+    gradabeam.current_nodes = [current]
 
-    scores1 = gradabeam_1.get_batched_fitness(seqs)
-    scores2 = gradabeam_2.get_batched_fitness(seqs)
-    scores4 = gradabeam_4.get_batched_fitness(seqs)
+    assert gradabeam.get_samples(1) == [best.seq]
+    assert gradabeam.get_current_samples(1) == [current.seq]
 
-    assert np.array_equal(scores1, scores2)
-    assert np.array_equal(scores1, scores4)
-    assert np.array_equal(scores2, scores4)
+
+def test_gradabeam_caches_raw_tism_and_derives_alpha_specific_probabilities():
+    gradabeam = GradaBeam(**GradaBeam.debug_init_args())
+    node = gradabeam.current_nodes[0]
+    probs, pos_and_chars = gradabeam.probabilities_over_actions_from_tism([node, node])
+
+    assert len(gradabeam._tism_cache) >= 1
+    np.testing.assert_array_equal(probs[0], probs[1])
+    assert pos_and_chars[0] == pos_and_chars[1]
+
+
+def test_rollout_node_hash_matches_equality_for_transient_state():
+    left = GradaBeam(**GradaBeam.debug_init_args()).current_nodes[0]
+    right = left.__class__(
+        seq=left.seq,
+        fitness=left.fitness,
+        edits_since_root=999,
+        mutations_per_sequence=3.0,
+        exploration_alpha=0.9,
+    )
+
+    assert left == right
+    assert hash(left) == hash(right)
 
 
 class TestGradientAlignment:
