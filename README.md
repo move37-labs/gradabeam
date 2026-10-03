@@ -360,3 +360,46 @@ also cite:
 
 Apache License 2.0, consistent with the upstream
 [nucleobench](https://github.com/move37-labs/nucleobench/blob/main/LICENSE) project.
+
+## Manuscript algorithm box (GrAdaBeam)
+
+The following pseudocode follows the revised manuscript's Methods, Section 4.3.1. Here, `f(s)` is the oracle fitness to **maximize**, `L` is the number of mutable positions, `B` is the beam size, `R` is the number of rollouts per root, `D` is the maximum rollout depth, `mu` is the per-position mutation rate, and `alpha` is the uniform-exploration weight. Each beam member carries its sequence and its own `(mu, alpha)`. The score ceiling `s_max` defaults to 3.0 and the probability cap `C` to 0.10.
+
+```text
+Input: starting sequence s0, oracle f, B, R, D, initial mu and alpha, search budget
+beam <- B independently sampled, scored mutants of s0, each with (mu, alpha)
+
+while budget remains:
+    candidates <- empty set
+    for each root in beam:
+        g[i] <- max TISM(root.sequence, i, current_base -> b)
+                over alternative bases b, for each mutable position i
+        if sd(g) = 0: p_grad <- Uniform(positions)
+        else:
+            z <- g / sd(g);  tau <- max(1, max(z) / s_max)
+            p_grad <- normalize(min(softmax(z / tau), C))
+        p_root <- (1 - root.alpha) * p_grad + root.alpha * Uniform(positions)
+
+        repeat R times:                         # independent rollouts from this root
+            parent <- root;  p <- p_root
+            for depth = 1, ..., D:
+                if no unmasked positions remain: break
+                n <- sample Binomial(L, parent.mu) conditional on n >= 1
+                n <- min(n, number of unmasked positions)
+                M <- sample n distinct positions without replacement from p
+                child.sequence <- parent.sequence with each position in M
+                                  changed to a uniformly sampled alternative base
+                child.fitness <- f(child.sequence)
+                child.mu <- n / L
+                child.alpha <- clip(mean over i in M of
+                                    parent.alpha * Uniform(i) / p(i), 0.01, 0.99)
+                candidates <- candidates union {child}
+                if child.fitness <= parent.fitness: break
+                p <- normalize(p with positions in M set to zero)
+                parent <- child
+
+    beam <- B highest-fitness candidates, carrying their updated (mu, alpha)
+return the highest-fitness sequence found
+```
+
+The gradient and mixture distributions are computed once per root and reused across its rollout; only fitness is reevaluated after each mutation. If the search uses a fixed step count, one pass through the outer loop is one step.
