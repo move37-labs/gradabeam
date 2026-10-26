@@ -24,7 +24,7 @@ dependencies = [
     "numpy>=1.21",
     "scipy",
     "torch>=2.2",
-    "xxhash>=3.0.0,<4",
+    "xxhash>=3.0.0,<5",
 ]
 
 [project.optional-dependencies]
